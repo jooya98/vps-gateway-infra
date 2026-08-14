@@ -1,15 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-OUT_DIR=${OUT_DIR:-"$ROOT/.generated"}
 DRY_RUN=${DRY_RUN:-0}
-[[ -f "$OUT_DIR/cloudflared/cloudflared.service" ]] || { printf 'cloudflared: render configuration first\n' >&2; exit 1; }
-if [[ "$DRY_RUN" == 1 ]]; then printf 'cloudflared: installation skipped in dry-run\n'; exit 0; fi
+VERSION=${CLOUDFLARED_VERSION:-latest}
+INSTALL_PATH=${CLOUDFLARED_BIN:-/usr/local/bin/cloudflared}
+API_BASE=https://api.github.com/repos/cloudflare/cloudflared/releases
+
+case "$(dpkg --print-architecture 2>/dev/null || uname -m)" in
+  amd64|x86_64) ARCH=amd64;;
+  arm64|aarch64) ARCH=arm64;;
+  *) printf 'cloudflared: unsupported architecture\n' >&2; exit 1;;
+esac
+
+release_url() {
+  if [[ "$VERSION" == latest ]]; then printf '%s/latest\n' "$API_BASE"; else printf '%s/tags/%s\n' "$API_BASE" "${VERSION#v}"; fi
+}
+
+if [[ "$DRY_RUN" == 1 ]]; then
+  printf 'cloudflared: dry-run architecture=%s version=%s\n' "$ARCH" "$VERSION"
+  exit 0
+fi
 [[ "$(id -u)" == 0 ]] || { printf 'cloudflared: root is required\n' >&2; exit 1; }
-command -v systemctl >/dev/null 2>&1 || { printf 'cloudflared: systemd is required for installation\n' >&2; exit 1; }
-[[ -x "${CLOUDFLARED_BIN:-/usr/bin/cloudflared}" ]] || { printf 'cloudflared: install the pinned binary before enabling the service\n' >&2; exit 1; }
-[[ -n "${CLOUDFLARED_TUNNEL_TOKEN:-}" ]] || { printf 'cloudflared: token is required\n' >&2; exit 1; }
-install -d -m 0700 /etc/cloudflared
-printf '%s' "$CLOUDFLARED_TUNNEL_TOKEN" > "${CLOUDFLARED_TOKEN_PATH:-/etc/cloudflared/token}"
-chmod 0600 "${CLOUDFLARED_TOKEN_PATH:-/etc/cloudflared/token}"
-install -m 0644 "$OUT_DIR/cloudflared/cloudflared.service" /etc/systemd/system/cloudflared.service
+command -v curl >/dev/null 2>&1 || { printf 'cloudflared: curl is required\n' >&2; exit 1; }
+command -v python3 >/dev/null 2>&1 || { printf 'cloudflared: python3 is required\n' >&2; exit 1; }
+
+release_json=$(mktemp)
+binary=$(mktemp)
+cleanup() { rm -f "$release_json" "$binary"; }
+trap cleanup EXIT
+curl -fsSL --retry 3 "$(release_url)" -o "$release_json"
+IFS=$'\t' read -r tag asset_url digest asset_name < <(python3 - "$release_json" "$ARCH" <<'PY'
+import json, sys
+release=json.load(open(sys.argv[1]))
+arch=sys.argv[2]
+name=f'cloudflared-linux-{arch}'
+for asset in release.get('assets',[]):
+    if asset['name'] == name:
+        print(release['tag_name'], asset['browser_download_url'], asset.get('digest',''), asset['name'], sep='\t')
+        break
+else:
+    raise SystemExit(f'asset not found: {name}')
+PY
+)
+printf '%s\n' "cloudflared: downloading official release $tag ($ARCH)"
+curl -fsSL --retry 3 "$asset_url" -o "$binary"
+if [[ "$digest" == sha256:* ]]; then
+  expected=${digest#sha256:}; actual=$(sha256sum "$binary" | awk '{print $1}')
+  [[ "$actual" == "$expected" ]] || { printf 'cloudflared: checksum verification failed\n' >&2; exit 1; }
+else
+  printf '%s\n' 'cloudflared: upstream checksum unavailable; continuing without checksum verification' >&2
+fi
+install -m 0755 "$binary" "$INSTALL_PATH"
+"$INSTALL_PATH" --version >/dev/null
+printf '%s\n' "cloudflared: installed and validated $tag"

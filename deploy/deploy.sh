@@ -18,6 +18,12 @@ if [[ -f "$ROOT/config/defaults.env.example" ]]; then
   source "$ROOT/config/defaults.env.example"
   set +a
 fi
+if [[ -f "$ROOT/config/versions.env.example" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/config/versions.env.example"
+  set +a
+fi
 if [[ -f "$ENV_FILE" ]]; then
   set -a
   # shellcheck disable=SC1090
@@ -35,19 +41,23 @@ if [[ "$DRY_RUN" == 0 && "$(id -u)" != 0 ]]; then printf 'deploy: root is requir
 if [[ "$DRY_RUN" == 0 ]]; then
   printf '%s\n' 'deploy: install dependencies'
   apt-get update -qq
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 ca-certificates curl ufw
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 ca-certificates curl tar ufw
 else
   printf '%s\n' 'deploy: dependency installation skipped (dry-run)'
 fi
+
+printf '%s\n' 'deploy: install official sing-box'
+"$ROOT/scripts/install-sing-box.sh"
+printf '%s\n' 'deploy: install official cloudflared'
+"$ROOT/scripts/install-cloudflared.sh"
 
 printf '%s\n' 'deploy: render templates'
 "$ROOT/deploy/render.sh"
 printf '%s\n' 'deploy: validate generated configuration'
 "$ROOT/deploy/validate.sh"
 
-printf '%s\n' 'deploy: install services'
-"$ROOT/scripts/install-sing-box.sh"
-"$ROOT/scripts/install-cloudflared.sh"
+printf '%s\n' 'deploy: install systemd units'
+"$ROOT/scripts/install-systemd-units.sh"
 if [[ "$DRY_RUN" == 0 ]]; then
   "$ROOT/scripts/apply-firewall.sh"
   systemctl daemon-reload

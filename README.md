@@ -23,6 +23,7 @@ is intentionally separate and requires explicit root execution.
 ```sh
 cp .env.example .env
 # Fill secrets locally; do not commit .env.
+# For reproducible installs, override versions from config/versions.env.example.
 ./deploy/deploy.sh --dry-run --env-file .env
 ```
 

@@ -21,6 +21,8 @@ REALITY_SHORT_ID=0000000000000001
 SOCKS_USERNAME=test-user
 SOCKS_PASSWORD=test-socks-password
 CLOUDFLARED_TUNNEL_TOKEN=test-cloudflared-token
+SING_BOX_VERSION=1.13.18
+CLOUDFLARED_VERSION=2026.8.1
 EOF
 ./deploy/deploy.sh --dry-run --env-file /tmp/test.env >/tmp/deploy-output
 ! grep -q 'test-reality-private-key\|test-socks-password\|test-cloudflared-token' /tmp/deploy-output
