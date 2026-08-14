@@ -40,6 +40,43 @@ grep -q 'deploy: install official cloudflared' <<<"$deploy_output"
 grep -q 'deploy: validate generated configuration' <<<"$deploy_output"
 grep -q 'deploy: install systemd units' <<<"$deploy_output"
 
+printf '%s\n' 'test: base package bootstrap missing config'
+missing_packages="$TMP_OUT/missing-packages.env"
+if CONFIG_FILE="$missing_packages" DRY_RUN=1 "$ROOT/bootstrap/01-base-packages.sh" >/dev/null 2>"$TMP_OUT/missing-packages.err"; then
+  printf 'test: missing packages.env was accepted\n' >&2
+  exit 1
+fi
+grep -q 'create it from config/packages.env.example' "$TMP_OUT/missing-packages.err"
+rm -f "$missing_packages"
+
+printf '%s\n' 'test: base package bootstrap parsing and dry-run'
+TMP_PACKAGES=$(mktemp)
+cat > "$TMP_PACKAGES" <<'EOF'
+BASE_PACKAGES="
+curl
+wget
+curl
+"
+SHELL_PACKAGES="
+bash-completion
+wget
+"
+SYSTEM_DEBUG_PACKAGES="
+htop
+"
+NETWORK_DEBUG_PACKAGES="
+htop
+"
+CONTAINER_SUPPORT_PACKAGES="
+gnupg
+"
+EOF
+bootstrap_output=$(CONFIG_FILE="$TMP_PACKAGES" DRY_RUN=1 "$ROOT/bootstrap/01-base-packages.sh")
+grep -q '5 unique packages' <<<"$bootstrap_output"
+[[ "$(grep -o 'curl' <<<"$bootstrap_output" | wc -l)" == 1 ]]
+[[ "$(grep -o 'wget' <<<"$bootstrap_output" | wc -l)" == 1 ]]
+rm -f "$TMP_PACKAGES"
+
 printf '%s\n' 'test: missing secret rejection'
 if env -i PATH="$PATH" ROOT="$ROOT" OUT_DIR="$TMP_OUT/missing" "$ROOT/deploy/render.sh" >/dev/null 2>&1; then
   printf 'test: missing variables were accepted\n' >&2

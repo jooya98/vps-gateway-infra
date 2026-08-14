@@ -41,5 +41,19 @@ The deploy script validates rendered files before changing system state.
 - `config/`: non-secret defaults and firewall policy
 - `deploy/`: orchestration, rendering, and validation
 - `scripts/`: service installation and firewall application
-- `tests/`: shell, leakage, and disposable-container checks
-- `docs/`: architecture and operational assumptions
+- `bootstrap/`: declarative clean-Debian base package installation
+- `tests/`: shell, leakage, bootstrap, and disposable-container checks
+- `docs/`: architecture, bootstrap, and operational assumptions
+
+## Base OS bootstrap
+
+The operator package layer is explicit and separate from service deployment:
+
+```sh
+cp config/packages.env.example config/packages.env
+sudo ./bootstrap/01-base-packages.sh
+```
+
+It installs only the packages declared in `config/packages.env`; it does not
+create users, change shells, configure SSH/firewall, install Docker, or add
+services. See `docs/bootstrap.md`.
