@@ -1,0 +1,14 @@
+[Unit]
+Description=Cloudflare Tunnel client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+TimeoutStartSec=15
+ExecStart=${CLOUDFLARED_BIN} --no-autoupdate tunnel run --token-file ${CLOUDFLARED_TOKEN_PATH}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

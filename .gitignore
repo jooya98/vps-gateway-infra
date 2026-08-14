@@ -1,0 +1,18 @@
+# Local secrets and rendered state
+.env
+.env.*
+!.env.example
+config/**/*.env
+.generated/
+
+# Runtime and test artifacts
+*.log
+*.pid
+__pycache__/
+.DS_Store
+
+# Keep forensic reference files immutable and out of normal commits.
+# They are retained locally for analysis and should be reviewed before any
+# intentional archival commit because the original snapshot contains secrets.
+reference/extracted/
+reference/echo-kit.tar.gz

@@ -1,0 +1,13 @@
+[Unit]
+Description=sing-box gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=${SING_BOX_BIN} run -c ${SING_BOX_CONFIG_PATH}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
