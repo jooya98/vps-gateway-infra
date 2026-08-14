@@ -40,7 +40,7 @@ PY
 chmod 0600 "$RUNTIME"
 RUNTIME_FILE="$RUNTIME" CLIENT_INFO_FILE="$CLIENT" "$ROOT/scripts/validate-secrets.sh" >/dev/null
 
-printf '%s\n' 'test-secrets: malformed runtime rejected'
+printf '%s\\n' 'test-secrets: malformed runtime rejected'
 cp "$RUNTIME" "$TMP/malformed.conf"
 python3 - "$TMP/malformed.conf" <<'PY'
 from pathlib import Path
@@ -54,7 +54,21 @@ if RUNTIME_FILE="$TMP/malformed.conf" CLIENT_INFO_FILE="$CLIENT" "$ROOT/scripts/
   exit 1
 fi
 
-printf '%s\n' 'test-secrets: overwrite protection'
+printf '%s\\n' 'test-secrets: UUIDv7 is accepted'
+cp "$RUNTIME" "$TMP/uuidv7.conf"
+python3 - "$TMP/uuidv7.conf" <<'PY'
+from pathlib import Path
+p = Path(__import__('sys').argv[1])
+text = p.read_text().replace('VLESS_UUID=', 'VLESS_UUID=0192f0c8-1e5b-7cc3-98c4-dc0c0c072942\n# replaced:')
+p.write_text(text)
+PY
+chmod 0600 "$TMP/uuidv7.conf"
+if ! RUNTIME_FILE="$TMP/uuidv7.conf" CLIENT_INFO_FILE="$CLIENT" "$ROOT/scripts/validate-secrets.sh" >/dev/null 2>&1; then
+  printf 'test-secrets: UUIDv7 was rejected\n' >&2
+  exit 1
+fi
+
+printf '%s\\n' 'test-secrets: overwrite protection'
 if RUNTIME_FILE="$RUNTIME" CLIENT_INFO_FILE="$TMP/new-client.txt" SING_BOX_BIN="$FAKE_BIN" "$ROOT/scripts/generate-secrets.sh" >/dev/null 2>&1; then
   printf 'test-secrets: existing runtime was overwritten\n' >&2
   exit 1
