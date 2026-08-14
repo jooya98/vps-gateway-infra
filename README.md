@@ -57,3 +57,38 @@ sudo ./bootstrap/01-base-packages.sh
 It installs only the packages declared in `config/packages.env`; it does not
 create users, change shells, configure SSH/firewall, install Docker, or add
 services. See `docs/bootstrap.md`.
+
+## First deployment on a new gateway
+
+For a fresh VPS, install the official sing-box binary and generate new
+identity material once:
+
+```sh
+sudo ./scripts/install-sing-box.sh
+sudo ./scripts/generate-secrets.sh
+```
+
+Review the non-sensitive client parameters:
+
+```sh
+sudo less /root/vps-gateway-client-info.txt
+```
+
+Add the Cloudflare tunnel token to `/root/vps-gateway-runtime.conf`, then
+validate the completed runtime file without printing its values:
+
+```sh
+sudo ./scripts/validate-secrets.sh
+```
+
+Deploy using the generated runtime file:
+
+```sh
+sudo ./deploy/deploy.sh \\
+  --profile gateway-minimal \\
+  --env-file /root/vps-gateway-runtime.conf
+```
+
+The generator refuses to overwrite existing credential files. Do not run it
+again for an existing gateway unless deliberately rotating all client
+credentials. It never generates or stores the Cloudflare token.
