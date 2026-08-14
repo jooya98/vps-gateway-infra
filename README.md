@@ -27,6 +27,10 @@ cp .env.example .env
 ./deploy/deploy.sh --dry-run --env-file .env
 ```
 
+Profiles are selected with `--profile default` or `--profile gateway-minimal`.
+Only the minimal gateway services are currently implemented; Docker and
+monitoring profiles are intentionally not present yet.
+
 A real deployment requires root on Debian and explicit installation settings.
 The deploy script validates rendered files before changing system state.
 

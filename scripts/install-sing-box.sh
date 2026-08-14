@@ -33,7 +33,7 @@ archive=$(mktemp --suffix=.tar.gz)
 extract_dir=$(mktemp -d)
 cleanup() { rm -f "$release_json" "$archive"; rm -rf "$extract_dir"; }
 trap cleanup EXIT
-curl -fsSL --retry 3 "$(release_url)" -o "$release_json"
+curl -fsSL --compressed --retry 3 "$(release_url)" -o "$release_json"
 IFS=$'\t' read -r tag asset_url digest asset_name < <(python3 - "$release_json" "$ARCH" <<'PY'
 import json, sys
 release=json.load(open(sys.argv[1]))
@@ -49,7 +49,7 @@ else:
 PY
 )
 printf '%s\n' "sing-box: downloading official release $tag ($ARCH)"
-curl -fsSL --retry 3 "$asset_url" -o "$archive"
+curl -fsSL --compressed --connect-timeout 30 --max-time 120 --retry 3 "$asset_url" -o "$archive"
 if [[ "$digest" == sha256:* ]]; then
   expected=${digest#sha256:}; actual=$(sha256sum "$archive" | awk '{print $1}')
   [[ "$actual" == "$expected" ]] || { printf 'sing-box: checksum verification failed\n' >&2; exit 1; }
