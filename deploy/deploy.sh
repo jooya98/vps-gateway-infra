@@ -24,12 +24,6 @@ if [[ -f "$ROOT/config/defaults.env.example" ]]; then
   source "$ROOT/config/defaults.env.example"
   set +a
 fi
-if [[ -f "$PROFILE_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$PROFILE_FILE"
-  set +a
-fi
 if [[ -f "$ROOT/config/versions.env.example" ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -42,13 +36,6 @@ if [[ -f "$ROOT/config/versions.env" ]]; then
   source "$ROOT/config/versions.env"
   set +a
 fi
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +a
-fi
-
 printf '%s\n' 'deploy: preflight'
 [[ -f /etc/os-release ]] || { printf 'deploy: Debian host required\n' >&2; exit 1; }
 # shellcheck disable=SC1091
@@ -67,7 +54,7 @@ if [[ "$DRY_RUN" == 0 ]]; then
   apt-get update -qq
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 ca-certificates curl tar ufw
 else
-  printf '%s\n' 'deploy: dependency installation skipped (dry-run)'
+  printf '%s\n' 'deploy: install dependencies (dry-run; skipped)'
 fi
 
 if [[ "$DRY_RUN" == 0 ]]; then
@@ -79,6 +66,16 @@ printf '%s\n' 'deploy: install official sing-box'
 "$ROOT/scripts/install-sing-box.sh"
 printf '%s\n' 'deploy: install official cloudflared'
 "$ROOT/scripts/install-cloudflared.sh"
+
+printf '%s\n' 'deploy: load profile and secrets'
+set -a
+# shellcheck disable=SC1090
+source "$PROFILE_FILE"
+if [[ -f "$ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+fi
+set +a
 
 printf '%s\n' 'deploy: render templates'
 "$ROOT/deploy/render.sh"
@@ -92,8 +89,9 @@ if [[ "$DRY_RUN" == 0 ]]; then
   systemctl daemon-reload
   systemctl enable --now sing-box.service cloudflared.service
   systemctl --no-pager --quiet is-active sing-box.service cloudflared.service
+  printf '%s\n' 'deploy: services enabled and started'
 else
   "$ROOT/scripts/apply-firewall.sh" --dry-run >/dev/null
   printf '%s\n' 'deploy: systemd and firewall application skipped (dry-run)'
 fi
-printf '%s\n' 'deploy: health checks passed'
+printf '%s\n' 'deploy: deployment complete'

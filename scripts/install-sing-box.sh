@@ -49,7 +49,10 @@ else:
 PY
 )
 printf '%s\n' "sing-box: downloading official release $tag ($ARCH)"
-curl -fsSL --compressed --connect-timeout 30 --max-time 120 --retry 3 "$asset_url" -o "$archive"
+if ! curl -fsSL --compressed --connect-timeout 30 --max-time 120 --retry 3 "$asset_url" -o "$archive"; then
+  printf '%s\n' "sing-box: official release asset download failed for $tag ($ARCH); no binary was installed" >&2
+  exit 1
+fi
 if [[ "$digest" == sha256:* ]]; then
   expected=${digest#sha256:}; actual=$(sha256sum "$archive" | awk '{print $1}')
   [[ "$actual" == "$expected" ]] || { printf 'sing-box: checksum verification failed\n' >&2; exit 1; }

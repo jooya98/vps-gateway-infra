@@ -11,6 +11,14 @@ if [[ -f "$ROOT/config/defaults.env.example" ]]; then
   source "$ROOT/config/defaults.env.example"
   set +a
 fi
+PROFILE=${PROFILE:-default}
+PROFILE_FILE="$ROOT/config/profiles/$PROFILE.env.example"
+if [[ -f "$PROFILE_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$PROFILE_FILE"
+  set +a
+fi
 if [[ -f "$ENV_FILE" ]]; then
   set -a
   # shellcheck disable=SC1090

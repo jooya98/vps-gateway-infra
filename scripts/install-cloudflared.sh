@@ -42,7 +42,10 @@ else:
 PY
 )
 printf '%s\n' "cloudflared: downloading official release $tag ($ARCH)"
-curl -fsSL --compressed --connect-timeout 30 --max-time 120 --retry 3 "$asset_url" -o "$binary"
+if ! curl -fsSL --compressed --connect-timeout 30 --max-time 120 --retry 3 "$asset_url" -o "$binary"; then
+  printf '%s\n' "cloudflared: official release asset download failed for $tag ($ARCH); no binary was installed" >&2
+  exit 1
+fi
 if [[ "$digest" == sha256:* ]]; then
   expected=${digest#sha256:}; actual=$(sha256sum "$binary" | awk '{print $1}')
   [[ "$actual" == "$expected" ]] || { printf 'cloudflared: checksum verification failed\n' >&2; exit 1; }

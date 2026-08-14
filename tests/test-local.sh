@@ -37,10 +37,29 @@ deploy_output=$(OUT_DIR="$TMP_OUT/deploy" "$ROOT/deploy/deploy.sh" --dry-run --e
 ! grep -q 'test-reality-private-key\|test-socks-password\|test-cloudflared-token' <<<"$deploy_output"
 grep -q 'deploy: install official sing-box' <<<"$deploy_output"
 grep -q 'deploy: install official cloudflared' <<<"$deploy_output"
+grep -q 'deploy: load profile and secrets' <<<"$deploy_output"
 grep -q 'deploy: validate generated configuration' <<<"$deploy_output"
 grep -q 'deploy: install systemd units' <<<"$deploy_output"
+grep -q 'deploy: deployment complete' <<<"$deploy_output"
+[[ "$(grep -n 'deploy: install dependencies' <<<"$deploy_output" | cut -d: -f1)" -lt "$(grep -n 'deploy: install official sing-box' <<<"$deploy_output" | cut -d: -f1)" ]]
+[[ "$(grep -n 'deploy: install official cloudflared' <<<"$deploy_output" | cut -d: -f1)" -lt "$(grep -n 'deploy: render templates' <<<"$deploy_output" | cut -d: -f1)" ]]
+python3 - "$TMP_OUT/deploy/sing-box/config.json" <<'PY'
+import json, sys
+config = json.load(open(sys.argv[1]))
+vless, socks = config['inbounds']
+assert (vless['type'], vless['listen'], vless['listen_port']) == ('vless', '::', 443)
+assert vless['tls']['reality']['enabled'] is True
+assert vless['tls']['reality']['handshake'] == {'server': 'www.cloudflare.com', 'server_port': 443}
+assert (socks['type'], socks['listen'], socks['listen_port']) == ('socks', '0.0.0.0', 1080)
+assert config['outbounds'] == [{'tag': 'direct', 'type': 'direct'}]
+PY
+grep -q 'tunnel run --token-file' "$TMP_OUT/deploy/cloudflared/cloudflared.service"
 
-printf '%s\n' 'test: base package bootstrap missing config'
+minimal_output=$(OUT_DIR="$TMP_OUT/minimal" "$ROOT/deploy/deploy.sh" --dry-run --profile gateway-minimal --env-file "$TMP_ENV")
+python3 - "$TMP_OUT/minimal/sing-box/config.json" <<'PY'
+import json, sys
+assert json.load(open(sys.argv[1]))['inbounds'][1]['listen'] == '127.0.0.1'
+PY
 missing_packages="$TMP_OUT/missing-packages.env"
 if CONFIG_FILE="$missing_packages" DRY_RUN=1 "$ROOT/bootstrap/01-base-packages.sh" >/dev/null 2>"$TMP_OUT/missing-packages.err"; then
   printf 'test: missing packages.env was accepted\n' >&2
