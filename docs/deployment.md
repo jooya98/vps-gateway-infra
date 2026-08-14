@@ -1,5 +1,41 @@
 # Deployment
 
+## Recommended fresh-VPS flow
+
+On a fresh Debian VPS, clone the public repository and run the single-command
+bootstrap as root:
+
+```sh
+git clone https://github.com/jooya98/vps-gateway-infra.git /opt/vps-gateway-infra
+cd /opt/vps-gateway-infra
+sudo ./bootstrap.sh --profile gateway-minimal
+```
+
+The bootstrap entrypoint:
+
+1. verifies Debian and required repository files
+2. installs only the pre-generation prerequisites when the local base package profile is absent
+3. installs the official sing-box binary if it is not already present
+4. generates new gateway credentials only when the runtime file is absent
+5. prompts once for the Cloudflare tunnel token with hidden input
+6. validates the protected runtime and client-information files
+7. delegates the actual deployment to `deploy/deploy.sh`
+8. prints deployment and service status without printing secrets
+
+The generated files are outside the repository:
+
+```text
+/root/vps-gateway-runtime.conf
+/root/vps-gateway-client-info.txt
+```
+
+The bootstrap script refuses to overwrite an existing runtime file. This makes
+re-running it safe for an existing gateway, provided the runtime file remains
+valid. It never generates a Cloudflare token.
+
+Review `/root/vps-gateway-client-info.txt` after bootstrap to configure clients.
+It contains no Reality private key, SOCKS password, or Cloudflare token.
+
 ## Exact rebuild flow
 
 ```text
@@ -37,16 +73,20 @@ token is written only to `/etc/cloudflared/token` with mode `0600`.
 
 ## First deployment on a new gateway
 
-This workflow is explicit and must be run only once for a new gateway. It does
-not regenerate credentials during normal deployment.
-
-After the official sing-box binary is installed, generate fresh identity
-material:
+The recommended path for a new VPS is the top-level bootstrap command:
 
 ```sh
-sudo ./scripts/install-sing-box.sh
-sudo ./scripts/generate-secrets.sh
+./bootstrap.sh --profile gateway-minimal
 ```
+
+It installs the official sing-box binary before generating fresh credentials,
+creates the protected runtime file, requests the Cloudflare token interactively,
+validates the result, and then executes the normal deployment flow. Review
+`/root/vps-gateway-client-info.txt` after completion.
+
+The advanced/manual sequence below remains available when each stage must be
+run separately.
+
 
 The script writes:
 

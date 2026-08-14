@@ -60,8 +60,21 @@ services. See `docs/bootstrap.md`.
 
 ## First deployment on a new gateway
 
-For a fresh VPS, install the official sing-box binary and generate new
-identity material once:
+Recommended single-command flow on a fresh Debian VPS:
+
+```sh
+git clone https://github.com/jooya98/vps-gateway-infra.git /opt/vps-gateway-infra
+cd /opt/vps-gateway-infra
+sudo ./bootstrap.sh --profile gateway-minimal
+```
+
+The bootstrap command installs prerequisites, installs sing-box, generates new
+credentials once, prompts for the Cloudflare token with hidden input, validates
+the runtime file, and delegates to the existing deployment pipeline. Review
+`/root/vps-gateway-client-info.txt` afterward.
+
+For advanced/manual operation, install sing-box and generate identity material
+separately:
 
 ```sh
 sudo ./scripts/install-sing-box.sh
