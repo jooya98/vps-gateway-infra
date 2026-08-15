@@ -79,6 +79,15 @@ set +a
 
 printf '%s\n' 'deploy: render templates'
 "$ROOT/deploy/render.sh"
+
+# Create administrative user (interactive, can be skipped with SKIP_ADMIN_PROVISION=1)
+if [[ "${SKIP_ADMIN_PROVISION:-0}" != "1" ]]; then
+  printf '%s\n' 'deploy: create admin user (interactive)'
+  "$ROOT/scripts/create-admin-user.sh"
+else
+  printf '%s\n' 'deploy: admin user provisioning skipped (SKIP_ADMIN_PROVISION=1)'
+fi
+
 printf '%s\n' 'deploy: install SSH hardening drop‑in'
 "$ROOT/scripts/install-ssh-hardening.sh"
 printf '%s\n' 'deploy: validate generated configuration'

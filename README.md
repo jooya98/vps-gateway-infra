@@ -1,107 +1,433 @@
 # VPS Gateway Infrastructure
 
-Minimal, reproducible Debian gateway configuration rebuilt from the preserved
-`echo-kit` reference artifact.
+Minimal, reproducible, and security-focused Debian gateway provisioning framework.
 
-## Safety boundary
+This project turns a manually configured VPS gateway into a reproducible infrastructure
+deployment pipeline.
 
-`reference/` is forensic input. It must not be edited, sanitized in place, or
-copied directly to a host. The original snapshot contains credentials. Runtime
-configuration is generated from templates using externally supplied variables.
+The goal is not to provide a generic server installer. The goal is to create a
+controlled, auditable, and repeatable gateway environment with explicit security
+boundaries.
 
-No real `.env` file is included. Start from `.env.example` and keep secrets
-outside Git.
+---
 
-## First milestone
+## Design Principles
 
-Render and validate the expected sing-box, SSH, cloudflared, and firewall
-configuration from a clean Debian container or host. Real service installation
-is intentionally separate and requires explicit root execution.
+### Reproducibility
 
-## Usage
+A gateway should be rebuildable from a clean Debian installation without relying on
+unknown manual changes.
 
-```sh
-cp .env.example .env
-# Fill secrets locally; do not commit .env.
-# For reproducible installs, override versions from config/versions.env.example.
-./deploy/deploy.sh --dry-run --env-file .env
+### Explicit state changes
+
+Installation steps are separated into independent operations:
+
+- base package installation
+- administrative access provisioning
+- SSH hardening
+- firewall configuration
+- service deployment
+- validation
+
+No hidden "magic" configuration is applied.
+
+### Security boundaries
+
+Secrets, credentials, and runtime state are intentionally separated from the repository.
+
+The repository contains:
+
+- templates
+- configuration defaults
+- deployment logic
+- validation tools
+
+It does not contain:
+
+- private keys
+- API tokens
+- generated credentials
+- runtime `.env` files
+
+---
+
+# Lifecycle
+
+A new gateway follows this lifecycle:
+
 ```
 
-Profiles are selected with `--profile default` or `--profile gateway-minimal`.
-Only the minimal gateway services are currently implemented; Docker and
-monitoring profiles are intentionally not present yet.
+Fresh Debian VPS
 
-A real deployment requires root on Debian and explicit installation settings.
-The deploy script validates rendered files before changing system state.
+```
+    |
+    v
+```
 
-## Layout
+bootstrap
+(base packages)
 
-- `reference/`: immutable forensic artifact and extraction
-- `templates/`: sanitized runtime templates
-- `config/`: non-secret defaults and firewall policy
-- `deploy/`: orchestration, rendering, and validation
-- `scripts/`: service installation and firewall application
-- `bootstrap/`: declarative clean-Debian base package installation
-- `tests/`: shell, leakage, bootstrap, and disposable-container checks
-- `docs/`: architecture, bootstrap, and operational assumptions
+```
+    |
+    v
+```
 
-## Base OS bootstrap
+SSH hardening
+(disable unsafe access methods)
 
-The operator package layer is explicit and separate from service deployment:
+```
+    |
+    v
+```
 
-```sh
+Admin user provisioning
+(non-root administrative access)
+
+```
+    |
+    v
+```
+
+Firewall configuration
+
+```
+    |
+    v
+```
+
+Service deployment
+
+```
+    |
+    v
+```
+
+Validation
+
+````
+
+---
+
+# Security Model
+
+## Root access
+
+The initial VPS provider root account is used only for bootstrap operations.
+
+After SSH hardening:
+
+- root SSH login is disabled
+- password authentication is disabled
+- public key authentication is required
+
+Administrative operations are performed through a dedicated non-root user.
+
+---
+
+## Admin user provisioning
+
+Admin user creation is intentionally separate from SSH hardening.
+
+Run:
+
+```bash
+sudo ./scripts/create-admin-user.sh
+````
+
+The script:
+
+* creates a dedicated administrative user
+* configures `/home/<user>`
+* copies the authorized SSH key
+* enables sudo access
+* creates passwordless sudo rules
+* validates sudoers syntax
+
+Example:
+
+```
+root
+ |
+ |  bootstrap only
+ |
+ v
+
+admin-user
+ |
+ +-- SSH key authentication
+ |
+ +-- sudo privileges
+```
+
+The user password exists only as a recovery/console mechanism.
+SSH password authentication remains disabled.
+
+---
+
+# Safety Boundary
+
+## `reference/`
+
+`reference/` contains forensic input extracted from the original gateway artifact.
+
+It must be treated as immutable.
+
+Do not:
+
+* edit files in place
+* deploy directly from this directory
+* copy credentials from this directory
+
+Runtime configuration is generated from sanitized templates.
+
+---
+
+# Repository Layout
+
+```
+.
+├── bootstrap/
+│   └── Base Debian package layer
+│
+├── config/
+│   ├── defaults
+│   ├── versions
+│   ├── profiles
+│   └── firewall policy
+│
+├── deploy/
+│   ├── render
+│   ├── deploy
+│   ├── validate
+│   └── rollback
+│
+├── scripts/
+│   ├── create-admin-user.sh
+│   ├── install-sing-box.sh
+│   ├── install-cloudflared.sh
+│   ├── install-ssh-hardening.sh
+│   ├── apply-firewall.sh
+│   └── validation helpers
+│
+├── templates/
+│   ├── ssh
+│   ├── sing-box
+│   └── cloudflared
+│
+├── tests/
+│
+└── docs/
+```
+
+---
+
+# Initial Setup
+
+Clone the repository:
+
+```bash
+git clone https://github.com/jooya98/vps-gateway-infra.git \
+    /opt/vps-gateway-infra
+
+cd /opt/vps-gateway-infra
+```
+
+---
+
+# Bootstrap
+
+Install base packages:
+
+```bash
 cp config/packages.env.example config/packages.env
+
 sudo ./bootstrap/01-base-packages.sh
 ```
 
-It installs only the packages declared in `config/packages.env`; it does not
-create users, change shells, configure SSH/firewall, install Docker, or add
-services. See `docs/bootstrap.md`.
+The bootstrap layer does **not**:
 
-## First deployment on a new gateway
+* create users
+* modify SSH configuration
+* configure firewall
+* install services
 
-Recommended single-command flow on a fresh Debian VPS:
+Those operations are explicit.
 
-```sh
-git clone https://github.com/jooya98/vps-gateway-infra.git /opt/vps-gateway-infra
-cd /opt/vps-gateway-infra
-sudo ./bootstrap.sh --profile gateway-minimal
+---
+
+# Administrative Access
+During gateway bootstrap, the operator is prompted to create an administrative user. The operation can also be executed manually using scripts/create-admin-user.sh.
+
+Validate:
+
+```bash
+id <username>
+
+groups <username>
+
+sudo -l -U <username>
 ```
 
-The bootstrap command installs prerequisites, installs sing-box, generates new
-credentials once, prompts for the Cloudflare token with hidden input, validates
-the runtime file, and delegates to the existing deployment pipeline. Review
-`/root/vps-gateway-client-info.txt` afterward.
+Test SSH access before closing the root session.
 
-For advanced/manual operation, install sing-box and generate identity material
-separately:
+---
 
-```sh
-sudo ./scripts/install-sing-box.sh
-sudo ./scripts/generate-secrets.sh
+# Deployment
+
+Prepare runtime configuration:
+
+```bash
+cp .env.example .env
 ```
 
-Review the non-sensitive client parameters:
+Fill required values locally.
 
-```sh
-sudo less /root/vps-gateway-client-info.txt
+Never commit:
+
+```
+.env
+*.key
+*.pem
+credentials
+tokens
 ```
 
-Add the Cloudflare tunnel token to `/root/vps-gateway-runtime.conf`, then
-validate the completed runtime file without printing its values:
+---
 
-```sh
-sudo ./scripts/validate-secrets.sh
+Dry-run deployment:
+
+```bash
+./deploy/deploy.sh \
+    --dry-run \
+    --env-file .env
 ```
 
-Deploy using the generated runtime file:
+Real deployment:
 
-```sh
-sudo ./deploy/deploy.sh \\
-  --profile gateway-minimal \\
-  --env-file /root/vps-gateway-runtime.conf
+```bash
+sudo ./deploy/deploy.sh \
+    --profile gateway-minimal \
+    --env-file /root/vps-gateway-runtime.conf
 ```
 
-The generator refuses to overwrite existing credential files. Do not run it
-again for an existing gateway unless deliberately rotating all client
-credentials. It never generates or stores the Cloudflare token.
+---
+
+# Validation
+
+The project provides validation steps before and after deployment.
+
+Examples:
+
+```bash
+sudo ./deploy/validate.sh
+```
+
+Checks include:
+
+* rendered configuration validity
+* service configuration
+* firewall state
+* secret leakage prevention
+* deployment assumptions
+
+---
+
+# Profiles
+
+Available:
+
+```
+default
+gateway-minimal
+```
+
+Current focus:
+
+```
+gateway-minimal
+```
+
+Future profiles may include:
+
+* Docker workloads
+* monitoring stack
+* additional gateway services
+
+---
+
+# Development Workflow
+
+Recommended workflow:
+
+```
+change
+ |
+ v
+local validation
+ |
+ v
+test environment
+ |
+ v
+commit
+ |
+v
+release tag
+```
+
+Avoid making manual production-only changes.
+
+If a production change is required, convert it into:
+
+* a script change
+* a template change
+* a validation rule
+* documentation
+
+---
+
+# Roadmap
+
+## Completed
+
+* [x] Repository reconstruction from reference artifact
+* [x] Template-based configuration generation
+* [x] Secret separation
+* [x] Debian bootstrap layer
+* [x] SSH hardening
+* [x] Firewall automation
+* [x] Admin user provisioning
+* [x] Passwordless sudo
+* [x] Validation scripts
+
+## Planned
+
+* [ ] Automated CI validation
+* [ ] Release tagging
+* [ ] Multi-node gateway support
+* [ ] Better observability
+* [ ] Automated recovery workflows
+
+---
+
+# Philosophy
+
+A VPS should not depend on the memory of the person who configured it.
+
+Infrastructure becomes reliable when:
+
+```
+knowledge
+    |
+    v
+documentation
+    |
+    v
+automation
+    |
+    v
+repeatable systems
+```
+
+This repository is an attempt to move from manually maintained servers toward
+reproducible infrastructure.
