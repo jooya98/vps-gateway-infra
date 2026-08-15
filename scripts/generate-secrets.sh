@@ -44,9 +44,11 @@ chmod 0600 "$runtime_tmp" "$client_tmp"
 
 if command -v uuidgen >/dev/null 2>&1; then
   VLESS_UUID=$(uuidgen)
+elif "$SING_BOX_BIN" generate uuid >/dev/null 2>&1; then
+  VLESS_UUID=$("$SING_BOX_BIN" generate uuid)
 else
   raw_uuid=$(openssl rand -hex 16)
-  VLESS_UUID="${raw_uuid:0:8}-${raw_uuid:8:4}-4${raw_uuid:13:3}-${raw_uuid:16:4}-${raw_uuid:20:12}"
+  VLESS_UUID="${raw_uuid:0:8}-${raw_uuid:8:4}-4${raw_uuid:13:3}-8${raw_uuid:17:3}-${raw_uuid:20:12}"
 fi
 
 keypair_output=$(
