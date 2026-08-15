@@ -35,7 +35,7 @@ for name in "${required[@]}"; do
   [[ -n "${!name:-}" ]] || fail "$name is missing or empty"
 done
 
-[[ "$VLESS_UUID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]] || fail 'VLESS_UUID format is invalid'
+[[ "$VLESS_UUID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[789abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]] || fail 'VLESS_UUID format is invalid'
 [[ "$REALITY_PRIVATE_KEY" =~ ^[A-Za-z0-9_=-]+$ ]] || fail 'REALITY_PRIVATE_KEY format is invalid'
 [[ "$REALITY_SHORT_ID" =~ ^[0-9a-fA-F]{2,64}$ ]] || fail 'REALITY_SHORT_ID format is invalid'
 [[ "$SOCKS_USERNAME" =~ ^[A-Za-z0-9._-]+$ ]] || fail 'SOCKS_USERNAME format is invalid'
