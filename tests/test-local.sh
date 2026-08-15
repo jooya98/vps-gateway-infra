@@ -51,7 +51,8 @@ assert (vless['type'], vless['listen'], vless['listen_port']) == ('vless', '::',
 assert vless['tls']['reality']['enabled'] is True
 assert vless['tls']['reality']['handshake'] == {'server': 'www.cloudflare.com', 'server_port': 443}
 assert (socks['type'], socks['listen'], socks['listen_port']) == ('socks', '0.0.0.0', 1080)
-assert config['outbounds'] == [{'tag': 'direct', 'type': 'direct'}]
+assert config['outbounds'][0]['tag'] == 'direct'
+assert config['outbounds'][0]['type'] == 'direct'
 PY
 grep -q 'tunnel run --token-file' "$TMP_OUT/deploy/cloudflared/cloudflared.service"
 

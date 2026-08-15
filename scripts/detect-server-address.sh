@@ -13,44 +13,58 @@ fail() {
 [[ "$SERVER_ADDRESS_PREFERENCE" =~ ^(ipv4|ipv6|auto)$ ]] || fail 'SERVER_ADDRESS_PREFERENCE must be ipv4, ipv6, or auto'
 
 if [[ "$SERVER_ADDRESS_MODE" == ipv4 ]]; then
-  ipv4_address=$(ip -4 addr show scope global | awk '/inet / {print $2}' | cut -d/ -f1 | head -1)
+  ipv4_address=$(curl -4 -fsS https://api.ipify.org 2>/dev/null || ip route get 1.1.1.1 | awk '/src/ {print $NF}')
   [[ -n "$ipv4_address" ]] || fail 'no global IPv4 address found'
+  [[ "$ipv4_address" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || fail 'invalid IPv4 address format'
+  [[ ! "$ipv4_address" =~ ^(10|172\.(1[6-9]|2[0-9]|3[0-1])|192\.168)\. ]] || fail 'private IPv4 address detected'
   printf '%s\n' "$ipv4_address"
   exit 0
 fi
 
 if [[ "$SERVER_ADDRESS_MODE" == ipv6 ]]; then
-  ipv6_address=$(ip -6 addr show scope global | awk '/inet6 / {print $2}' | cut -d/ -f1 | grep -v '^fe80:' | head -1)
+  ipv6_address=$(curl -6 -fsS https://api6.ipify.org 2>/dev/null || ip -6 route get 2606:4700:4700::1111 | awk '/src/ {print $NF}')
   [[ -n "$ipv6_address" ]] || fail 'no global IPv6 address found'
+  [[ "$ipv6_address" =~ ^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$ ]] || fail 'invalid IPv6 address format'
+  [[ ! "$ipv6_address" =~ ^(fe80|fc00|fd00|fe[cd]) ]] || fail 'private IPv6 address detected'
   printf '%s\n' "$ipv6_address"
   exit 0
 fi
 
 # auto mode
 
-ipv4_address=$(ip -4 addr show scope global | awk '/inet / {print $2}' | cut -d/ -f1 | head -1)
-ipv6_address=$(ip -6 addr show scope global | awk '/inet6 / {print $2}' | cut -d/ -f1 | grep -v '^fe80:' | head -1)
+ipv4_address=$(curl -4 -fsS https://api.ipify.org 2>/dev/null || ip route get 1.1.1.1 | awk '/src/ {print $NF}')
+ipv6_address=$(curl -6 -fsS https://api6.ipify.org 2>/dev/null || ip -6 route get 2606:4700:4700::1111 | awk '/src/ {print $NF}')
 
 if [[ "$SERVER_ADDRESS_PREFERENCE" == ipv4 ]]; then
-  [[ -n "$ipv4_address" ]] || fail 'no global IPv4 address found'
-  printf '%s\n' "$ipv4_address"
-  exit 0
+  if [[ -n "$ipv4_address" ]]; then
+    [[ "$ipv4_address" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || fail 'invalid IPv4 address format'
+    [[ ! "$ipv4_address" =~ ^(10|172\.(1[6-9]|2[0-9]|3[0-1])|192\.168)\. ]] || fail 'private IPv4 address detected'
+    printf '%s\n' "$ipv4_address"
+    exit 0
+  fi
 fi
 
 if [[ "$SERVER_ADDRESS_PREFERENCE" == ipv6 ]]; then
-  [[ -n "$ipv6_address" ]] || fail 'no global IPv6 address found'
-  printf '%s\n' "$ipv6_address"
-  exit 0
+  if [[ -n "$ipv6_address" ]]; then
+    [[ "$ipv6_address" =~ ^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$ ]] || fail 'invalid IPv6 address format'
+    [[ ! "$ipv6_address" =~ ^(fe80|fc00|fd00|fe[cd]) ]] || fail 'private IPv6 address detected'
+    printf '%s\n' "$ipv6_address"
+    exit 0
+  fi
 fi
 
 # auto preference
 
 if [[ -n "$ipv4_address" ]]; then
+  [[ "$ipv4_address" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || fail 'invalid IPv4 address format'
+  [[ ! "$ipv4_address" =~ ^(10|172\.(1[6-9]|2[0-9]|3[0-1])|192\.168)\. ]] || fail 'private IPv4 address detected'
   printf '%s\n' "$ipv4_address"
   exit 0
 fi
 
 if [[ -n "$ipv6_address" ]]; then
+  [[ "$ipv6_address" =~ ^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$ ]] || fail 'invalid IPv6 address format'
+  [[ ! "$ipv6_address" =~ ^(fe80|fc00|fd00|fe[cd]) ]] || fail 'private IPv6 address detected'
   printf '%s\n' "$ipv6_address"
   exit 0
 fi

@@ -1,0 +1,8 @@
+# Auto detected public server address
+SERVER=70.34.204.80
+PORT=443
+UUID=edf69aeb-7804-4b2a-72be-0fcf640c3521
+REALITY_PUBLIC_KEY=taV_BqUQAuA6-SIrYAl2MroGIVj1d67Ru0qFszSD124
+REALITY_SHORT_ID=e892ccd34cce9cce
+FLOW=xtls-rprx-vision
+SNI=www.cloudflare.com

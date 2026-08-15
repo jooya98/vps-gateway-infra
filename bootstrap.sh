@@ -10,6 +10,7 @@ BASE_BOOTSTRAP_SCRIPT=${BASE_BOOTSTRAP_SCRIPT:-"$ROOT/bootstrap/01-base-packages
 SING_BOX_INSTALL_SCRIPT=${SING_BOX_INSTALL_SCRIPT:-"$ROOT/scripts/install-sing-box.sh"}
 GENERATE_SCRIPT=${GENERATE_SCRIPT:-"$ROOT/scripts/generate-secrets.sh"}
 VALIDATE_SCRIPT=${VALIDATE_SCRIPT:-"$ROOT/scripts/validate-secrets.sh"}
+DETECT_SCRIPT=${DETECT_SCRIPT:-"$ROOT/scripts/detect-server-address.sh"}
 DEPLOY_SCRIPT=${DEPLOY_SCRIPT:-"$ROOT/deploy/deploy.sh"}
 SYSTEMCTL_BIN=${SYSTEMCTL_BIN:-systemctl}
 TEST_MODE=${BOOTSTRAP_TEST_MODE:-0}
@@ -33,6 +34,7 @@ required_files=(
   "$SING_BOX_INSTALL_SCRIPT"
   "$GENERATE_SCRIPT"
   "$VALIDATE_SCRIPT"
+  "$DETECT_SCRIPT"
   "$DEPLOY_SCRIPT"
 )
 for file in "${required_files[@]}"; do
@@ -145,6 +147,28 @@ fi
 
 printf '%s\n' 'bootstrap: validating runtime credentials'
 RUNTIME_FILE="$RUNTIME_FILE" CLIENT_INFO_FILE="$CLIENT_INFO_FILE" "$VALIDATE_SCRIPT"
+
+printf '%s\n' 'bootstrap: detecting server address'
+SERVER_ADDRESS=$("$DETECT_SCRIPT")
+
+client_info_tmp=$(mktemp "$(dirname "$CLIENT_INFO_FILE")/.vps-gateway-client-info.XXXXXX")
+cleanup_client_info_tmp() { rm -f "$client_info_tmp"; }
+trap cleanup_client_info_tmp EXIT
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+  if [[ "$line" == SERVER=* ]]; then
+    printf 'SERVER=%s\n' "$SERVER_ADDRESS" >> "$client_info_tmp"
+  else
+    printf '%s\n' "$line" >> "$client_info_tmp"
+  fi
+done < "$CLIENT_INFO_FILE"
+
+if [[ "$(id -u)" == 0 ]]; then
+  chown root:root "$client_info_tmp"
+fi
+chmod 0600 "$client_info_tmp"
+mv "$client_info_tmp" "$CLIENT_INFO_FILE"
+trap - EXIT
 
 printf '%s\n' 'bootstrap: starting gateway deployment'
 "$DEPLOY_SCRIPT" --profile "$PROFILE" --env-file "$RUNTIME_FILE"
