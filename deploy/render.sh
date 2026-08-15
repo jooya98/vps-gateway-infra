@@ -46,7 +46,8 @@ root, out = map(Path, sys.argv[1:])
 files = {
     root / 'templates/sing-box/config.json.tmpl': Path(out / 'sing-box/config.json'),
     root / 'templates/sing-box/sing-box.service.tmpl': Path(out / 'sing-box/sing-box.service'),
-    root / 'templates/ssh/99-hardening.conf.tmpl': Path(out / 'ssh/99-hardening.conf'),
+    root / 'templates/ssh/00-vps-gateway-hardening.conf.tmpl': Path(out / 'ssh/00-vps-gateway-hardening.conf'),
+
     root / 'templates/cloudflared/cloudflared.service.tmpl': Path(out / 'cloudflared/cloudflared.service'),
 }
 pattern = re.compile(r'\$\{([A-Z][A-Z0-9_]*)\}')

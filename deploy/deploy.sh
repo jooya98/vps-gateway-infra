@@ -79,6 +79,8 @@ set +a
 
 printf '%s\n' 'deploy: render templates'
 "$ROOT/deploy/render.sh"
+printf '%s\n' 'deploy: install SSH hardening drop‑in'
+"$ROOT/scripts/install-ssh-hardening.sh"
 printf '%s\n' 'deploy: validate generated configuration'
 "$ROOT/deploy/validate.sh"
 
