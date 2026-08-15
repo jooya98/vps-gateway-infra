@@ -54,6 +54,7 @@ if id "$ADMIN_USER" &>/dev/null; then
 
   if [[ ! -d "/home/$ADMIN_USER" ]]; then
     mkdir -p "/home/$ADMIN_USER"
+    chown "${ADMIN_USER}:${ADMIN_USER}" "$TARGET_SSH_DIR"
     chown "$ADMIN_USER:$ADMIN_USER" "/home/$ADMIN_USER"
   fi
 else
