@@ -31,12 +31,37 @@ for src,dst in [("templates/sing-box/sing-box.service.tmpl","sing-box/sing-box.s
 if truth("ENABLE_CLOUDFLARED"):
  text=(root/"templates/cloudflared/cloudflared.service.tmpl").read_text(); text=re.sub(r"\$\{([A-Z][A-Z0-9_]*)\}",lambda m:env.get(m.group(1),m.group(0)),text); (out/"cloudflared/cloudflared.service").write_text(text)
 if truth("ENABLE_DNS_STEERING"):
- domain_src=root/"config/gateway/domains/ai-domains.txt"; domains=[x.strip().rstrip('.') for x in domain_src.read_text().splitlines() if x.strip() and not x.lstrip().startswith('#')];
+ domain_src=root/"config/gateway/domains/ai-domains.txt"; domains=[x.strip().rstrip('.') for x in domain_src.read_text().splitlines() if x.strip() and not x.lstrip().startswith('#')]
  if not domains: raise SystemExit("render: DNS domain inventory is empty")
- (out/"sniproxy/domains.csv").write_text("".join(f"{d}.,suffix\\n" for d in domains)); cidrs=[x.strip() for x in env.get("DNS_ALLOWED_CIDRS","").split(';') if x.strip()]
+ (out/"sniproxy/domains.csv").write_text("".join(f"{d}.,suffix\n" for d in domains)); cidrs=[x.strip() for x in env.get("DNS_ALLOWED_CIDRS","").split(';') if x.strip()]
  if not cidrs: raise SystemExit("render: DNS_ALLOWED_CIDRS is empty")
- (out/"sniproxy/cidr.csv").write_text("\\n".join(cidrs)+"\\n0.0.0.0/0,reject\\n::/0,reject\\n")
- yaml=f'''general:\n  upstream_dns: {env["SNIPROXY_UPSTREAM_DNS"]}\n  bind_dns_over_udp: "{env["SNIPROXY_BIND_ADDRESS"]}:{env["SNIPROXY_DNS_PORT"]}"\n  bind_dns_over_tcp: "{env["SNIPROXY_BIND_ADDRESS"]}:{env["SNIPROXY_DNS_PORT"]}"\n  bind_http:\n  bind_https: "{env["SNIPROXY_BIND_ADDRESS"]}:{env["SNIPROXY_HTTPS_PORT"]}"\n  public_ipv4: "{env["SNIPROXY_PUBLIC_IPV4"]}"\n  allow_conn_to_local: false\n  log_level: {env["SNIPROXY_LOG_LEVEL"]}\nacl:\n  domain:\n    enabled: true\n    priority: 20\n    path: "{env["SNIPROXY_DOMAINS_PATH"]}"\n    refresh_interval: 1h0m0s\n  cidr:\n    enabled: true\n    priority: 30\n    path: "{env["SNIPROXY_CIDR_PATH"]}"\n    refresh_interval: 1h0m0s\n  geoip:\n    enabled: false\n  override:\n    enabled: false\n'''; (out/"sniproxy/config.yaml").write_text(yaml)
+ (out/"sniproxy/cidr.csv").write_text("\n".join(cidrs)+"\n0.0.0.0/0,reject\n::/0,reject\n")
+ yaml=f'''general:
+  upstream_dns: {env["SNIPROXY_UPSTREAM_DNS"]}
+  bind_dns_over_udp: "{env["SNIPROXY_BIND_ADDRESS"]}:{env["SNIPROXY_DNS_PORT"]}"
+  bind_dns_over_tcp: "{env["SNIPROXY_BIND_ADDRESS"]}:{env["SNIPROXY_DNS_PORT"]}"
+  bind_http:
+  bind_https: "{env["SNIPROXY_BIND_ADDRESS"]}:{env["SNIPROXY_HTTPS_PORT"]}"
+  public_ipv4: "{env["SNIPROXY_PUBLIC_IPV4"]}"
+  allow_conn_to_local: false
+  log_level: {env["SNIPROXY_LOG_LEVEL"]}
+acl:
+  domain:
+    enabled: true
+    priority: 20
+    path: "{env["SNIPROXY_DOMAINS_PATH"]}"
+    refresh_interval: 1h0m0s
+  cidr:
+    enabled: true
+    priority: 30
+    path: "{env["SNIPROXY_CIDR_PATH"]}"
+    refresh_interval: 1h0m0s
+  geoip:
+    enabled: false
+  override:
+    enabled: false
+'''
+ (out/"sniproxy/config.yaml").write_text(yaml)
 PY
 chmod 0600 "$OUT_DIR/sing-box/config.json"; chmod 0644 "$OUT_DIR"/sing-box/sing-box.service "$OUT_DIR"/ssh/00-vps-gateway-hardening.conf
 if [[ -f "$OUT_DIR/cloudflared/cloudflared.service" ]]; then chmod 0644 "$OUT_DIR/cloudflared/cloudflared.service"; fi
