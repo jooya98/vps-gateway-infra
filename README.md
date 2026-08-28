@@ -1,433 +1,114 @@
 # VPS Gateway Infrastructure
 
-Minimal, reproducible, and security-focused Debian gateway provisioning framework.
+Minimal, reproducible, and security-focused Debian personal gateway framework.
 
-This project turns a manually configured VPS gateway into a reproducible infrastructure
-deployment pipeline.
+This repository turns a manually configured VPS gateway into a reproducible
+infrastructure deployment pipeline. It now supports a conservative gateway
+profile and an explicit resilient profile with optional multi-transport
+sing-box and private DNS/SNI steering.
 
-The goal is not to provide a generic server installer. The goal is to create a
-controlled, auditable, and repeatable gateway environment with explicit security
-boundaries.
+## Architecture
 
----
+```text
+                 personal clients
+                       |
+        +--------------+--------------+
+        |              |              |
+      VLESS       Shadowsocks       SOCKS
+        |              |              |
+        +--------------+--------------+
+                       v
+                   sing-box
+                       |
+                    direct
+                       |
+                    Internet
 
-## Design Principles
-
-### Reproducibility
-
-A gateway should be rebuildable from a clean Debian installation without relying on
-unknown manual changes.
-
-### Explicit state changes
-
-Installation steps are separated into independent operations:
-
-- base package installation
-- administrative access provisioning
-- SSH hardening
-- firewall configuration
-- service deployment
-- validation
-
-No hidden "magic" configuration is applied.
-
-### Security boundaries
-
-Secrets, credentials, and runtime state are intentionally separated from the repository.
-
-The repository contains:
-
-- templates
-- configuration defaults
-- deployment logic
-- validation tools
-
-It does not contain:
-
-- private keys
-- API tokens
-- generated credentials
-- runtime `.env` files
-
----
-
-# Lifecycle
-
-A new gateway follows this lifecycle:
-
+ DNS clients -> private sniproxy DNS -> selected HTTPS -> SNI relay -> Internet
+                              \-> normal DNS -> normal destination
 ```
 
-Fresh Debian VPS
+The DNS layer is selective traffic steering, not a universal censorship,
+sanctions, or VPN mechanism. It changes the network path for explicitly listed
+TLS/HTTP domains. Provider/account policy can still reject the request.
 
-```
-    |
-    v
-```
+## Profiles
 
-bootstrap
-(base packages)
+- `default`: conservative VLESS + local authenticated SOCKS; no optional daemons.
+- `gateway-minimal`: the documented minimal gateway; VLESS on 443 and local SOCKS.
+- `gateway-resilient`: VLESS on 8443, Shadowsocks on 8444, local SOCKS, and
+  private DNS/SNI steering on UDP/TCP 53 plus HTTPS 443.
 
-```
-    |
-    v
-```
+VMess, Trojan, Hysteria2, and TUIC are implemented as independent sing-box
+feature flags but remain disabled in the resilient profile until their TLS
+certificate/key and operational requirements are supplied.
 
-SSH hardening
-(disable unsafe access methods)
+## DNS steering
 
-```
-    |
-    v
-```
+`mosajjal/sniproxy` is used instead of a custom SNI proxy. The repository pins
+sniproxy `v2.4.1`. The domain inventory is explicit and service-oriented at
+`config/gateway/domains/ai-domains.txt`.
 
-Admin user provisioning
-(non-root administrative access)
+DNS access is source-CIDR restricted and ends with reject rules, so the gateway
+is not an unrestricted public recursive resolver.
 
-```
-    |
-    v
-```
+## Security boundaries
 
-Firewall configuration
+- disabled transports do not open firewall ports
+- SOCKS is loopback-only by default
+- DNS is disabled unless the resilient profile is selected
+- cloudflared is optional
+- secrets are external runtime inputs
+- generated client artifacts are mode `0600`
+- SSH hardening remains part of deployment
 
-```
-    |
-    v
-```
+## Deployment
 
-Service deployment
+Minimal:
 
-```
-    |
-    v
+```sh
+sudo ./deploy/deploy.sh --profile gateway-minimal --env-file /root/vps-gateway-runtime.conf
 ```
 
-Validation
+Resilient:
 
-````
-
----
-
-# Security Model
-
-## Root access
-
-The initial VPS provider root account is used only for bootstrap operations.
-
-After SSH hardening:
-
-- root SSH login is disabled
-- password authentication is disabled
-- public key authentication is required
-
-Administrative operations are performed through a dedicated non-root user.
-
----
-
-## Admin user provisioning
-
-Admin user creation is intentionally separate from SSH hardening.
-
-Run:
-
-```bash
-sudo ./scripts/create-admin-user.sh
-````
-
-The script:
-
-* creates a dedicated administrative user
-* configures `/home/<user>`
-* copies the authorized SSH key
-* enables sudo access
-* creates passwordless sudo rules
-* validates sudoers syntax
-
-Example:
-
-```
-root
- |
- |  bootstrap only
- |
- v
-
-admin-user
- |
- +-- SSH key authentication
- |
- +-- sudo privileges
+```sh
+sudo ./deploy/deploy.sh --profile gateway-resilient --env-file /root/vps-gateway-runtime.conf
 ```
 
-The user password exists only as a recovery/console mechanism.
-SSH password authentication remains disabled.
+Dry-run:
 
----
-
-# Safety Boundary
-
-## `reference/`
-
-`reference/` contains forensic input extracted from the original gateway artifact.
-
-It must be treated as immutable.
-
-Do not:
-
-* edit files in place
-* deploy directly from this directory
-* copy credentials from this directory
-
-Runtime configuration is generated from sanitized templates.
-
----
-
-# Repository Layout
-
-```
-.
-├── bootstrap/
-│   └── Base Debian package layer
-│
-├── config/
-│   ├── defaults
-│   ├── versions
-│   ├── profiles
-│   └── firewall policy
-│
-├── deploy/
-│   ├── render
-│   ├── deploy
-│   ├── validate
-│   └── rollback
-│
-├── scripts/
-│   ├── create-admin-user.sh
-│   ├── install-sing-box.sh
-│   ├── install-cloudflared.sh
-│   ├── install-ssh-hardening.sh
-│   ├── apply-firewall.sh
-│   └── validation helpers
-│
-├── templates/
-│   ├── ssh
-│   ├── sing-box
-│   └── cloudflared
-│
-├── tests/
-│
-└── docs/
+```sh
+./deploy/deploy.sh --dry-run --profile gateway-resilient --env-file /path/to/test.env
 ```
 
----
+## Testing
 
-# Initial Setup
+Repository validation:
 
-Clone the repository:
-
-```bash
-git clone https://github.com/jooya98/vps-gateway-infra.git \
-    /opt/vps-gateway-infra
-
-cd /opt/vps-gateway-infra
+```sh
+./scripts/validate-repository.sh
 ```
 
----
+Local rendering and policy tests:
 
-# Bootstrap
-
-Install base packages:
-
-```bash
-cp config/packages.env.example config/packages.env
-
-sudo ./bootstrap/01-base-packages.sh
+```sh
+./tests/test-local.sh
+./tests/test-resilient.sh
 ```
 
-The bootstrap layer does **not**:
+Connectivity audit:
 
-* create users
-* modify SSH configuration
-* configure firewall
-* install services
-
-Those operations are explicit.
-
----
-
-# Administrative Access
-During gateway bootstrap, the operator is prompted to create an administrative user. The operation can also be executed manually using scripts/create-admin-user.sh.
-
-Validate:
-
-```bash
-id <username>
-
-groups <username>
-
-sudo -l -U <username>
+```sh
+./scripts/gateway-connectivity-audit.sh config/gateway/domains/ai-domains.txt
 ```
 
-Test SSH access before closing the root session.
+The audit distinguishes DNS, TCP, TLS, and HTTP/application outcomes instead of
+calling every HTTP error a network failure.
 
----
+## Design principles
 
-# Deployment
-
-Prepare runtime configuration:
-
-```bash
-cp .env.example .env
-```
-
-Fill required values locally.
-
-Never commit:
-
-```
-.env
-*.key
-*.pem
-credentials
-tokens
-```
-
----
-
-Dry-run deployment:
-
-```bash
-./deploy/deploy.sh \
-    --dry-run \
-    --env-file .env
-```
-
-Real deployment:
-
-```bash
-sudo ./deploy/deploy.sh \
-    --profile gateway-minimal \
-    --env-file /root/vps-gateway-runtime.conf
-```
-
----
-
-# Validation
-
-The project provides validation steps before and after deployment.
-
-Examples:
-
-```bash
-sudo ./deploy/validate.sh
-```
-
-Checks include:
-
-* rendered configuration validity
-* service configuration
-* firewall state
-* secret leakage prevention
-* deployment assumptions
-
----
-
-# Profiles
-
-Available:
-
-```
-default
-gateway-minimal
-```
-
-Current focus:
-
-```
-gateway-minimal
-```
-
-Future profiles may include:
-
-* Docker workloads
-* monitoring stack
-* additional gateway services
-
----
-
-# Development Workflow
-
-Recommended workflow:
-
-```
-change
- |
- v
-local validation
- |
- v
-test environment
- |
- v
-commit
- |
-v
-release tag
-```
-
-Avoid making manual production-only changes.
-
-If a production change is required, convert it into:
-
-* a script change
-* a template change
-* a validation rule
-* documentation
-
----
-
-# Roadmap
-
-## Completed
-
-* [x] Repository reconstruction from reference artifact
-* [x] Template-based configuration generation
-* [x] Secret separation
-* [x] Debian bootstrap layer
-* [x] SSH hardening
-* [x] Firewall automation
-* [x] Admin user provisioning
-* [x] Passwordless sudo
-* [x] Validation scripts
-
-## Planned
-
-* [ ] Automated CI validation
-* [ ] Release tagging
-* [ ] Multi-node gateway support
-* [ ] Better observability
-* [ ] Automated recovery workflows
-
----
-
-# Philosophy
-
-A VPS should not depend on the memory of the person who configured it.
-
-Infrastructure becomes reliable when:
-
-```
-knowledge
-    |
-    v
-documentation
-    |
-    v
-automation
-    |
-    v
-repeatable systems
-```
-
-This repository is an attempt to move from manually maintained servers toward
-reproducible infrastructure.
+The project remains source-driven and Debian-native. It does not replace the
+existing deployment pipeline with Docker Compose or a large orchestration layer.
+Optional components are independently configurable and the minimal deployment
+remains deliberately small.

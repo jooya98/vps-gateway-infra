@@ -1,161 +1,80 @@
 # Deployment
 
-## Recommended fresh-VPS flow
-
-On a fresh Debian VPS, clone the public repository and run the single-command
-bootstrap as root:
+## Minimal profile
 
 ```sh
-git clone https://github.com/jooya98/vps-gateway-infra.git /opt/vps-gateway-infra
-cd /opt/vps-gateway-infra
-sudo ./bootstrap.sh --profile gateway-minimal
+sudo ./deploy/deploy.sh --profile gateway-minimal --env-file /root/vps-gateway-runtime.conf
 ```
 
-The bootstrap entrypoint:
+The minimal profile keeps VLESS on 443 and authenticated SOCKS on loopback. It
+does not install sniproxy or cloudflared and does not expose additional
+transport ports.
 
-1. verifies Debian and required repository files
-2. installs only the pre-generation prerequisites when the local base package profile is absent
-3. installs the official sing-box binary if it is not already present
-4. generates new gateway credentials only when the runtime file is absent
-5. prompts once for the Cloudflare tunnel token with hidden input
-6. validates the protected runtime and client-information files
-7. delegates the actual deployment to `deploy/deploy.sh`
-8. prints deployment and service status without printing secrets
+## Resilient profile
 
-The generated files are outside the repository:
+Create a runtime environment containing the existing VLESS/Reality secrets,
+plus `TRANSPORT_PASSWORD`, `SNIPROXY_PUBLIC_IPV4`, and (when TLS transports are
+enabled) `TLS_SERVER_NAME`, `TLS_CERT_PATH`, and `TLS_KEY_PATH`.
 
-```text
-/root/vps-gateway-runtime.conf
-/root/vps-gateway-client-info.txt
-```
-
-The bootstrap script refuses to overwrite an existing runtime file. This makes
-re-running it safe for an existing gateway, provided the runtime file remains
-valid. It never generates a Cloudflare token.
-
-Review `/root/vps-gateway-client-info.txt` after bootstrap to configure clients.
-It contains no Reality private key, SOCKS password, or Cloudflare token.
-
-## Exact rebuild flow
-
-```text
-clean Debian VPS
-  -> clone private repository
-  -> provide .env and secret values out-of-band
-  -> optionally provide config/versions.env with pinned releases
-  -> run deploy/deploy.sh
-  -> install official sing-box and cloudflared binaries
-  -> render templates locally on the target
-  -> validate JSON, units, and managed policy
-  -> create a backup of current managed state
-  -> install managed configuration and systemd units
-  -> apply firewall policy
-  -> enable services
-  -> run health checks
-```
-
-The normal command is:
+Then:
 
 ```sh
-./deploy/deploy.sh --profile gateway-minimal --env-file /path/to/runtime.env
+sudo ./deploy/deploy.sh --profile gateway-resilient --env-file /root/vps-gateway-runtime.conf
 ```
 
-`--dry-run` performs preflight, version selection, rendering, validation, and
-policy generation without installing binaries or changing systemd/firewall
-state. The container test uses this mode after separately exercising the real
-upstream binary installers with disposable test paths.
+The resilient profile installs sing-box and sniproxy. It binds sniproxy DNS to
+UDP/TCP 53 and HTTPS SNI relay to 443, so VLESS moves to 8443. The firewall is
+derived from the profile rather than from a permanently open port list.
 
-## Secrets
+## DNS client access
 
-Runtime secrets are supplied through an ignored environment file. They are not
-printed, committed, or placed in generated repository files. The Cloudflare
-token is written only to `/etc/cloudflared/token` with mode `0600`.
+Set `DNS_ALLOWED_CIDRS` to the exact client networks that should be allowed to
+query the gateway. The default only permits localhost. Do not replace the
+source ACL with `0.0.0.0/0` unless you deliberately want a public DNS service.
 
-## First deployment on a new gateway
+The domain inventory is `config/gateway/domains/ai-domains.txt`. Add a domain
+only when there is a concrete reason to steer that service through the VPS.
 
-The recommended path for a new VPS is the top-level bootstrap command:
+## Cloudflared
+
+Cloudflared is disabled by default. To use it, set `ENABLE_CLOUDFLARED=true` and
+provide `CLOUDFLARED_TUNNEL_TOKEN`. Its installation, unit, and firewall behavior
+are then included; otherwise the gateway does not depend on a tunnel token.
+
+## Client artifacts
+
+After deployment, the client generator can create artifacts for every enabled
+transport:
 
 ```sh
-./bootstrap.sh --profile gateway-minimal
+sudo ./scripts/generate-client-profiles.sh
 ```
 
-It installs the official sing-box binary before generating fresh credentials,
-creates the protected runtime file, requests the Cloudflare token interactively,
-validates the result, and then executes the normal deployment flow. Review
-`/root/vps-gateway-client-info.txt` after completion.
+Artifacts are written with mode `0600`. The generator does not emit Reality
+private keys or Cloudflare tunnel tokens.
 
-The advanced/manual sequence below remains available when each stage must be
-run separately.
+## Connectivity audit
 
-
-The script writes:
-
-```text
-/root/vps-gateway-runtime.conf
-/root/vps-gateway-client-info.txt
-```
-
-The runtime file is mode `0600`, owned by `root:root`, and contains the new
-VLESS UUID, Reality private key, Reality short ID, and SOCKS credentials. The
-client info file contains only client-facing values and never contains the
-Reality private key.
-
-Review the client info:
+Use the audit utility against the curated inventory:
 
 ```sh
-less /root/vps-gateway-client-info.txt
+./scripts/gateway-connectivity-audit.sh config/gateway/domains/ai-domains.txt
 ```
 
-Add `CLOUDFLARED_TUNNEL_TOKEN` manually to the runtime file. The generator does
-not create this value. Validate the completed file:
+For a SOCKS path:
 
 ```sh
-./scripts/validate-secrets.sh
+PROXY='socks5h://user:password@127.0.0.1:1080' \
+  ./scripts/gateway-connectivity-audit.sh config/gateway/domains/ai-domains.txt
 ```
 
-Deploy:
+The audit intentionally separates network-layer failures from application
+responses. A `403`, `401`, `404`, or `429` after successful DNS/TCP/TLS proves
+that the network path reached the service even though the application rejected
+or limited the request.
 
-```sh
-./deploy/deploy.sh \\
-  --profile gateway-minimal \\
-  --env-file /root/vps-gateway-runtime.conf
-```
+## Rollback
 
-The generator refuses to overwrite existing runtime or client-info files. If
-the runtime file already exists, do not run the generator again unless you
-intend to rotate credentials and update every client.
-
-## Version policy
-
-`latest` is supported for development but is not reproducible. Production runs
-warn when either version is `latest`. For production, copy
-`config/versions.env.example` to the ignored `config/versions.env` and replace
-both placeholders with tested upstream release versions.
-
-## Rollback safety
-
-Before a real deployment changes managed configuration, systemd units, or UFW
-state, `deploy/backup.sh create` saves only the managed files under:
-
-```text
-/var/backups/vps-gateway-infra/<UTC timestamp>/
-```
-
-This may include the existing Cloudflare token, but the backup is host-local,
-mode `0700`, and never part of Git. It does not copy all of `/etc`.
-
-To restore the newest backup:
-
-```sh
-sudo ./deploy/rollback.sh
-```
-
-Or select an explicit backup directory:
-
-```sh
-sudo ./deploy/rollback.sh /var/backups/vps-gateway-infra/<timestamp>
-```
-
-Rollback covers managed sing-box/cloudflared configuration and units plus UFW
-user rules. It does not restore binaries, unrelated packages, users, host keys,
-or the full filesystem.
+The existing managed-state backup and rollback workflow remains in place. A
+real deployment creates the backup before installing new binaries or managed
+configuration.

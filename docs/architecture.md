@@ -1,61 +1,98 @@
 # Architecture
 
-## Reference artifact model
+The repository is a Debian-native personal gateway. The deployment pipeline remains
+template-driven; optional components are enabled by profile flags rather than
+being installed unconditionally.
 
-The deleted VPS is represented only by the preserved archive and its extracted
-contents under `reference/`. Those files are immutable forensic input. They are
-not runtime configuration and are not restored wholesale.
-
-The snapshot provides configuration intent for sing-box, SSH hardening, UFW,
-and the cloudflared systemd unit. It does not provide package installation,
-complete systemd state, users, host keys, Docker state, or the cloudflared token.
-
-## Template model
-
-Sanitized templates under `templates/` contain only reproducible structure.
-The sing-box template retains the observed VLESS Reality and authenticated
-SOCKS topology while replacing credentials with variable placeholders. SSH is a
-small managed drop-in, not a copy of the distribution's complete sshd_config.
-UFW is represented as a declarative policy rather than raw `/etc/ufw` state.
-
-## Secret injection model
-
-Secrets are supplied through the process environment or an ignored env file.
-Required values include the VLESS UUID, Reality private key, SOCKS password, and
-Cloudflare tunnel token. The token is written to a protected runtime file by
-the deployment process; it is never embedded in Git-tracked templates.
-
-Rendered files live in `.generated/` during validation and are installed only
-after validation succeeds. Output and errors avoid printing environment values.
-
-## Deployment flow
+## Runtime topology
 
 ```text
-preflight -> dependencies -> render -> validate -> install -> enable -> health
+                         PERSONAL CLIENTS
+                               |
+          +--------------------+--------------------+
+          |                    |                    |
+        VLESS             Shadowsocks          other enabled
+          |                    |                 transports
+          +--------------------+--------------------+
+                               |
+                            sing-box
+                               |
+                             direct
+                               |
+                           Internet
+
+ DNS client -> sniproxy DNS policy -> selected domain -> VPS:443 -> SNI relay -> destination
+                           \-> normal domain -> upstream DNS -> destination
 ```
 
-`deploy/deploy.sh --dry-run` stops after validation and is suitable for local
-or container testing. A real run requires explicit root access on Debian.
-Installation is intentionally minimal and can be extended without changing the
-reference boundary.
+## Component boundaries
 
-## Testing strategy
+- `sing-box`: authenticated proxy inbounds and direct outbound traffic.
+- `sniproxy`: optional DNS + TLS SNI steering. It does not terminate TLS for
+  the normal steering path.
+- `cloudflared`: optional tunnel client, independent of the gateway profile.
+- UFW: derives ingress rules from enabled protocol flags.
 
-The first test target is `debian:stable-slim`. The container receives a copy of
-the repository and temporary test values. It runs rendering and validation only;
-services are not expected to start because a normal disposable container does
-not run systemd and does not need real networking.
+## DNS steering semantics
 
-Tests verify shell syntax, required variables, JSON validity, systemd unit
-structure where `systemd-analyze` is available, firewall policy generation, and
-absence of known secret values in generated or tracked files.
+The DNS layer is not a public recursive resolver. Its source CIDR ACL contains
+explicit allowed networks followed by reject-all rules. The domain ACL contains
+only selected service FQDNs.
 
-## Explicit assumptions
+For a selected domain:
 
-- The reference `config.json` is treated as sing-box configuration based on
-  its observed schema; the original sing-box unit and installation method were
-  not preserved.
-- The reference's public SOCKS port is disabled by default in the declarative
-  firewall policy until its exposure is explicitly approved.
-- Cloudflare tunnel credentials are external inputs because the token file was
-  absent from the reference artifact.
+1. client asks the gateway DNS server for the domain;
+2. the domain ACL causes sniproxy to return the VPS public address;
+3. the client opens the normal HTTPS connection to port 443;
+4. sniproxy reads the TLS SNI and opens a connection to the real destination;
+5. encrypted application traffic passes through without TLS termination.
+
+For all other domains, DNS resolution is forwarded upstream and the client gets
+the normal destination address.
+
+This does not guarantee service access. Destination filtering, account policy,
+regional policy, application authentication, HTTP errors, or non-TLS protocols
+can still prevent a request from succeeding.
+
+## 443 trade-off
+
+A DNS-only steering mechanism cannot change an HTTPS destination port. Therefore
+`gateway-resilient` assigns 443 to sniproxy and moves VLESS to 8443. This is an
+intentional architectural trade-off. The minimal profile keeps VLESS on 443.
+
+## Multi-transport model
+
+Each sing-box inbound has an independent feature flag:
+
+```text
+ENABLE_VLESS
+ENABLE_SHADOWSOCKS
+ENABLE_VMESS
+ENABLE_TROJAN
+ENABLE_HYSTERIA2
+ENABLE_TUIC
+ENABLE_SOCKS
+```
+
+VMess/Trojan/Hysteria2/TUIC require external certificate/key material when
+TLS is enabled. They are supported by the renderer but disabled by default.
+
+## Secret model
+
+Secrets are read from an ignored runtime environment file. Generated config is
+mode `0600`. Client generation intentionally omits Reality private keys and
+Cloudflare tunnel tokens.
+
+## Failure model
+
+Connectivity tests classify failures by layer:
+
+```text
+DNS failure
+TCP failure
+TLS failure
+HTTP/application response
+```
+
+An HTTP `401`, `403`, `404`, or `429` after successful DNS/TCP/TLS is evidence
+of a functioning network path, not a DNS/TCP/TLS failure.

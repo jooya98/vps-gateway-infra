@@ -1,7 +1,7 @@
 # Explicit, service-level inventory for private DNS steering.
 # One FQDN or service domain per line. Subdomains are matched by sniproxy's
-# suffix ACL. Keep broad shared domains (google.com, microsoft.com, etc.) out
-# unless a concrete endpoint requires them.
+# suffix ACL. Keep broad shared domains (google.com, microsoft.com, cloudflare.com)
+# out unless a concrete endpoint requires them.
 
 # OpenAI / ChatGPT
 openai.com
@@ -58,16 +58,15 @@ api.ollama.com
 huggingface.co
 router.huggingface.co
 
-# Common AI gateways/providers used by the wider FreeLLMAPI ecosystem.
-groq.com
+# Other concrete AI API endpoints
 api.groq.com
+groq.com
 cerebras.ai
 api.cerebras.ai
 openrouter.ai
 api.openrouter.ai
 cohere.com
 api.cohere.com
-cloudflare.com
 api.cloudflare.com
 z.ai
 zhipuai.cn
