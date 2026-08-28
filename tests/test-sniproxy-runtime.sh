@@ -15,7 +15,7 @@ SING_BOX_LOG_LEVEL=warn
 EOF
 OUT_DIR="$TMP/rendered" PROFILE=gateway-resilient ENV_FILE="$TMP/runtime.env" "$ROOT/deploy/render.sh"
 install -d -m 0755 /etc/sniproxy; install -m 0644 "$TMP/rendered/sniproxy/config.yaml" /etc/sniproxy/config.yaml; install -m 0644 "$TMP/rendered/sniproxy/domains.csv" /etc/sniproxy/domains.csv; install -m 0644 "$TMP/rendered/sniproxy/cidr.csv" /etc/sniproxy/cidr.csv
-SNIPROXY_GENERAL__PREFERRED_VERSION=ipv4only sniproxy --config /etc/sniproxy/config.yaml > "$TMP/sniproxy.log" 2>&1 & PID=$!; sleep 2
+SNIPROXY_GENERAL__PREFERRED_VERSION=ipv4only SNIPROXY_GENERAL__BIND_HTTP= sniproxy --config /etc/sniproxy/config.yaml > "$TMP/sniproxy.log" 2>&1 & PID=$!; sleep 2
 if ! kill -0 "$PID" 2>/dev/null; then echo 'sniproxy failed to stay alive:'; cat "$TMP/sniproxy.log"; exit 1; fi
 selected=$(dig +short @127.0.0.1 openai.com A | tail -1); [[ "$selected" == 127.0.0.1 ]] || { echo "unexpected selected DNS answer: $selected"; cat "$TMP/sniproxy.log"; exit 1; }
 normal=$(dig +short @127.0.0.1 example.com A | head -1); [[ -n "$normal" && "$normal" != 127.0.0.1 ]] || { echo "unexpected normal DNS answer: $normal"; cat "$TMP/sniproxy.log"; exit 1; }
