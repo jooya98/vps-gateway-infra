@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd); TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-cat > "$TMP/runtime.env" <<'EOF'
+REALITY_PRIVATE_KEY=${REALITY_PRIVATE_KEY:-}; if command -v sing-box >/dev/null 2>&1; then REALITY_PRIVATE_KEY=$(sing-box generate reality-keypair 2>/dev/null | awk '/PrivateKey/{print $2}'); fi; [[ -n "$REALITY_PRIVATE_KEY" ]] || { echo 'test-resilient: valid Reality private key unavailable' >&2; exit 1; }
+cat > "$TMP/runtime.env" <<EOF
 VLESS_UUID=00000000-0000-4000-8000-000000000001
-REALITY_PRIVATE_KEY=test-reality-private-key
+REALITY_PRIVATE_KEY=$REALITY_PRIVATE_KEY
 REALITY_SHORT_ID=0000000000000001
 SOCKS_USERNAME=test-user
 SOCKS_PASSWORD=test-socks-password
