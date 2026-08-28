@@ -1,0 +1,19 @@
+name: gateway-validation
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  resilient:
+    runs-on: ubuntu-latest
+    container: debian:stable-slim
+    steps:
+      - name: Install test dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends bash coreutils findutils grep python3 jq ca-certificates curl tar ufw
+      - uses: actions/checkout@v4
+      - name: Validate repository
+        run: ./scripts/validate-repository.sh
+      - name: Render and test resilient profile
+        run: ./tests/test-resilient.sh
