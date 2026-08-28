@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 Environment=SNIPROXY_GENERAL__PREFERRED_VERSION=ipv4only
-Environment=SNIPROXY_GENERAL__BIND_HTTP=
+Environment=SNIPROXY_GENERAL__BIND_HTTP=127.0.0.1:65535
 ExecStart=${SNIPROXY_BIN} --config ${SNIPROXY_CONFIG_PATH}
 Restart=on-failure
 RestartSec=5s
