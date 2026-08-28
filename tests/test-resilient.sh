@@ -11,8 +11,8 @@ SOCKS_PASSWORD=test-socks-password
 TRANSPORT_PASSWORD=test-transport-password
 SNIPROXY_PUBLIC_IPV4=198.51.100.10
 TLS_SERVER_NAME=gateway.example.test
-TLS_CERT_PATH=/etc/sing-box/server.crt
-TLS_KEY_PATH=/etc/sing-box/server.key
+TLS_CERT_PATH=$TMP/server.crt
+TLS_KEY_PATH=$TMP/server.key
 SING_BOX_LOG_LEVEL=warn
 SKIP_ADMIN_PROVISION=1
 EOF
@@ -27,6 +27,16 @@ import json,sys
 x=json.load(open(sys.argv[1])); by={i['tag']:i for i in x['inbounds']}; assert set(by)=={'vless-in','shadowsocks-in','socks-in'}; assert by['vless-in']['listen_port']==8443; assert by['shadowsocks-in']['listen_port']==8444
 PY
 PROFILE=gateway-resilient ENV_FILE="$TMP/runtime.env" OUT_DIR="$TMP/resilient" "$ROOT/deploy/validate.sh"; grep -q '^0.0.0.0/0,reject$' "$TMP/resilient/sniproxy/cidr.csv"; grep -q '^::/0,reject$' "$TMP/resilient/sniproxy/cidr.csv"; [[ ! -f "$TMP/resilient/cloudflared/cloudflared.service" ]]
+printf '%s\n' 'test-resilient: all transport schemas accepted by installed sing-box'; openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=gateway.example.test' -keyout "$TMP/server.key" -out "$TMP/server.crt" >/dev/null 2>&1; cp "$TMP/runtime.env" "$TMP/full.env"; cat >> "$TMP/full.env" <<'EOF'
+ENABLE_VMESS=true
+ENABLE_TROJAN=true
+ENABLE_HYSTERIA2=true
+ENABLE_TUIC=true
+EOF
+OUT_DIR="$TMP/full" PROFILE=gateway-resilient ENV_FILE="$TMP/full.env" "$ROOT/deploy/render.sh"; sing-box check -c "$TMP/full/sing-box/config.json"; python3 - "$TMP/full/sing-box/config.json" <<'PY'
+import json,sys
+x=json.load(open(sys.argv[1])); assert {i['type'] for i in x['inbounds']}=={'vless','shadowsocks','vmess','trojan','hysteria2','tuic','socks'}
+PY
 printf '%s\n' 'test-resilient: firewall follows enabled components'; PROFILE=gateway-resilient ENV_FILE="$TMP/runtime.env" DRY_RUN=1 "$ROOT/scripts/apply-firewall.sh" > "$TMP/fw"; grep -q '8443/tcp' "$TMP/fw"; grep -q '8444/tcp' "$TMP/fw"; grep -q 'port 53 proto udp' "$TMP/fw"; grep -q 'port 53 proto tcp' "$TMP/fw"; ! grep -q '8445/tcp' "$TMP/fw"; ! grep -q '8446/tcp' "$TMP/fw"; ! grep -q '8447/udp' "$TMP/fw"; ! grep -q '8448/udp' "$TMP/fw"; ! grep -q '1080/tcp' "$TMP/fw"
 printf '%s\n' 'test-resilient: missing DNS public address is rejected'; if OUT_DIR="$TMP/bad" PROFILE=gateway-resilient ENV_FILE=/dev/null "$ROOT/deploy/render.sh" >/dev/null 2>&1; then exit 1; fi
 printf '%s\n' 'test-resilient: passed'
