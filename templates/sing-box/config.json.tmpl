@@ -1,54 +1,10 @@
 {
-  "inbounds": [
-    {
-      "listen": "::",
-      "listen_port": ${SING_BOX_LISTEN_PORT},
-      "tag": "vless-reality",
-      "tls": {
-        "enabled": true,
-        "reality": {
-          "enabled": true,
-          "handshake": {
-            "server": "${REALITY_HANDSHAKE_SERVER}",
-            "server_port": ${REALITY_HANDSHAKE_PORT}
-          },
-          "private_key": "${REALITY_PRIVATE_KEY}",
-          "short_id": [
-            "${REALITY_SHORT_ID}"
-          ]
-        },
-        "server_name": "${REALITY_SERVER_NAME}"
-      },
-      "type": "vless",
-      "users": [
-        {
-          "flow": "xtls-rprx-vision",
-          "name": "nova",
-          "uuid": "${VLESS_UUID}"
-        }
-      ]
-    },
-    {
-      "listen": "${SOCKS_LISTEN_ADDRESS}",
-      "listen_port": ${SOCKS_LISTEN_PORT},
-      "tag": "socks-out",
-      "type": "socks",
-      "users": [
-        {
-          "password": "${SOCKS_PASSWORD}",
-          "username": "${SOCKS_USERNAME}"
-        }
-      ]
-    }
-  ],
   "log": {
     "level": "${SING_BOX_LOG_LEVEL}",
     "timestamp": true
   },
+  "inbounds": ${SING_BOX_INBOUNDS_JSON},
   "outbounds": [
-    {
-      "tag": "direct",
-      "type": "direct"
-    }
+    {"type": "direct", "tag": "direct"}
   ]
 }

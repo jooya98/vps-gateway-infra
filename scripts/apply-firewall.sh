@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-POLICY_FILE=${POLICY_FILE:-"$ROOT/config/firewall/policy.env.example"}
 DRY_RUN=${DRY_RUN:-0}
-[[ -f "$POLICY_FILE" ]] || { printf 'firewall: policy file not found\n' >&2; exit 1; }
+POLICY_FILE=${POLICY_FILE:-"$ROOT/config/firewall/policy.env.example"}
+PROFILE=${PROFILE:-default}
 set -a
-# shellcheck disable=SC1090
+source "$ROOT/config/defaults.env.example"
+source "$ROOT/config/profiles/$PROFILE.env.example"
 source "$POLICY_FILE"
+[[ -f "${ENV_FILE:-}" ]] && source "$ENV_FILE"
 set +a
 
-case "${SSH_ALLOW_FROM:-}" in any) SSH_RULE=(allow "$SSH_PORT"/tcp);; *) SSH_RULE=(allow from "$SSH_ALLOW_FROM" to any port "$SSH_PORT" proto tcp);; esac
-case "${VLESS_ALLOW_FROM:-}" in any) VLESS_RULE=(allow "$VLESS_PORT"/tcp);; *) VLESS_RULE=(allow from "$VLESS_ALLOW_FROM" to any port "$VLESS_PORT" proto tcp);; esac
-commands=("ufw --force reset" "ufw default deny incoming" "ufw default allow outgoing" "ufw ${SSH_RULE[*]}" "ufw ${VLESS_RULE[*]}")
-if [[ "${ALLOW_PUBLIC_SOCKS:-false}" == true ]]; then
-  case "${SOCKS_ALLOW_FROM:-}" in any) commands+=("ufw allow ${SOCKS_PORT}/tcp");; *) commands+=("ufw allow from ${SOCKS_ALLOW_FROM} to any port ${SOCKS_PORT} proto tcp");; esac
-fi
+commands=("ufw --force reset" "ufw default deny incoming" "ufw default allow outgoing")
+allow_tcp() { local port=$1 from=$2; if [[ "$from" == any ]]; then commands+=("ufw allow ${port}/tcp"); else commands+=("ufw allow from ${from} to any port ${port} proto tcp"); fi; }
+allow_udp() { local port=$1 from=$2; if [[ "$from" == any ]]; then commands+=("ufw allow ${port}/udp"); else commands+=("ufw allow from ${from} to any port ${port} proto udp"); fi; }
+allow_tcp "$SSH_PORT" "$SSH_ALLOW_FROM"
+[[ "${ENABLE_VLESS:-false}" == true ]] && allow_tcp "$VLESS_PORT" "$VLESS_ALLOW_FROM"
+[[ "${ENABLE_SHADOWSOCKS:-false}" == true ]] && allow_tcp "$SHADOWSOCKS_PORT" "$SHADOWSOCKS_ALLOW_FROM"
+[[ "${ENABLE_VMESS:-false}" == true ]] && allow_tcp "$VMESS_PORT" "$VMESS_ALLOW_FROM"
+[[ "${ENABLE_TROJAN:-false}" == true ]] && allow_tcp "$TROJAN_PORT" "$TROJAN_ALLOW_FROM"
+[[ "${ENABLE_HYSTERIA2:-false}" == true ]] && allow_udp "$HYSTERIA2_PORT" "$HYSTERIA2_ALLOW_FROM"
+[[ "${ENABLE_TUIC:-false}" == true ]] && allow_udp "$TUIC_PORT" "$TUIC_ALLOW_FROM"
+[[ "${ENABLE_DNS_STEERING:-false}" == true ]] && { allow_udp "$DNS_PORT" "$DNS_ALLOW_FROM"; allow_tcp "$DNS_PORT" "$DNS_ALLOW_FROM"; }
+if [[ "${ALLOW_PUBLIC_SOCKS:-false}" == true ]]; then allow_tcp "$SOCKS_PORT" "$SOCKS_ALLOW_FROM"; fi
 commands+=("ufw --force enable")
 
-if [[ "$DRY_RUN" == 1 ]]; then
-  printf '%s\n' "${commands[@]}"
-  exit 0
-fi
+if [[ "$DRY_RUN" == 1 ]]; then printf '%s\n' "${commands[@]}"; exit 0; fi
 [[ "$(id -u)" == 0 ]] || { printf 'firewall: root is required\n' >&2; exit 1; }
 command -v ufw >/dev/null 2>&1 || { printf 'firewall: ufw is not installed\n' >&2; exit 1; }
-for command_line in "${commands[@]}"; do
-  # Policy values are validated above and contain no secrets.
-  read -r -a argv <<< "$command_line"
-  "${argv[@]}" >/dev/null
-done
+for line in "${commands[@]}"; do read -r -a argv <<< "$line"; "${argv[@]}" >/dev/null; done
 ufw status verbose
