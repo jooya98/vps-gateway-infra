@@ -1,5 +1,7 @@
 # Managed by vps-gateway-infra. Do not edit on the host.
-# This drop‑in loads **before** any cloud‑init or provider generated drop‑ins, ensuring our security settings take precedence.
+# The bootstrap phase detects the effective SSH listener and supplies SSH_PORT.
+# Keep the listener unchanged while tightening authentication to avoid lockout.
+Port ${SSH_PORT}
 PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
