@@ -11,6 +11,7 @@ if [[ "$(id -u)" != 0 && ( "$RUNTIME_FILE" == /root/vps-gateway-runtime.conf || 
   printf 'generate-secrets: root is required for default output paths\n' >&2
   exit 1
 fi
+
 command -v openssl >/dev/null 2>&1 || {
   printf 'generate-secrets: openssl is required\n' >&2
   exit 1
@@ -51,9 +52,7 @@ else
   VLESS_UUID="${raw_uuid:0:8}-${raw_uuid:8:4}-4${raw_uuid:13:3}-8${raw_uuid:17:3}-${raw_uuid:20:12}"
 fi
 
-keypair_output=$(
-  "$SING_BOX_BIN" generate reality-keypair 2>/dev/null
-) || {
+keypair_output=$("$SING_BOX_BIN" generate reality-keypair 2>/dev/null) || {
   printf 'generate-secrets: sing-box Reality keypair generation failed\n' >&2
   exit 1
 }
@@ -66,6 +65,7 @@ REALITY_PUBLIC_KEY=$(awk -F': *' '$1 == "PublicKey" { print $2; exit }' <<< "$ke
 
 REALITY_SHORT_ID=$(openssl rand -hex 8)
 SOCKS_PASSWORD=$(openssl rand -hex 24)
+TRANSPORT_PASSWORD=$(openssl rand -hex 24)
 
 cat > "$runtime_tmp" <<EOF
 # Generated once for this gateway. Keep mode 0600 and outside Git.
@@ -74,8 +74,9 @@ REALITY_PRIVATE_KEY=$REALITY_PRIVATE_KEY
 REALITY_SHORT_ID=$REALITY_SHORT_ID
 SOCKS_USERNAME=$SOCKS_USERNAME
 SOCKS_PASSWORD=$SOCKS_PASSWORD
-CLOUDFLARED_TUNNEL_TOKEN=
+TRANSPORT_PASSWORD=$TRANSPORT_PASSWORD
 EOF
+
 cat > "$client_tmp" <<EOF
 # Non-sensitive client parameters. Set SERVER manually after provisioning.
 SERVER=$SERVER
@@ -96,5 +97,5 @@ mv "$client_tmp" "$CLIENT_INFO_FILE"
 
 printf 'generate-secrets: generated runtime file: %s\n' "$RUNTIME_FILE"
 printf 'generate-secrets: generated client info: %s\n' "$CLIENT_INFO_FILE"
-printf '%s\n' 'generate-secrets: CLOUDFLARED_TUNNEL_TOKEN is empty; add it manually before deployment'
+printf '%s\n' 'generate-secrets: generated VLESS, Reality, SOCKS, and transport credentials'
 printf '%s\n' 'generate-secrets: credentials were not printed'
