@@ -15,6 +15,33 @@ DEPLOY_SCRIPT=${DEPLOY_SCRIPT:-"$ROOT/deploy/deploy.sh"}
 SYSTEMCTL_BIN=${SYSTEMCTL_BIN:-systemctl}
 TEST_MODE=${BOOTSTRAP_TEST_MODE:-0}
 
+usage() {
+  printf '%s\n' "usage: $0 [--profile NAME]"
+}
+
+while (($#)); do
+  case "$1" in
+    --profile)
+      (($# >= 2)) || { printf 'bootstrap: --profile requires a value\n' >&2; exit 2; }
+      PROFILE=$2
+      shift 2
+      ;;
+    --profile=*)
+      PROFILE=${1#*=}
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'bootstrap: unknown argument: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
 if [[ "$TEST_MODE" != 1 && "$(id -u)" != 0 ]]; then
   printf 'bootstrap: root is required\n' >&2
   exit 1
@@ -82,10 +109,13 @@ if [[ "$TEST_MODE" != 1 ]]; then
   for command_name in python3 curl tar openssl; do
     command -v "$command_name" >/dev/null 2>&1 || missing_prerequisites+=("$command_name")
   done
+  if ! command -v sshd >/dev/null 2>&1; then
+    missing_prerequisites+=(sshd)
+  fi
   if ((${#missing_prerequisites[@]})); then
-    printf 'bootstrap: installing missing pre-generation prerequisites: %s\n' "${missing_prerequisites[*]}"
+    printf 'bootstrap: installing missing prerequisites: %s\n' "${missing_prerequisites[*]}"
     apt-get update -qq
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 ca-certificates curl tar openssl
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 ca-certificates curl tar openssl openssh-server
   fi
 fi
 
@@ -94,13 +124,54 @@ if [[ ! -x "$SING_BOX_BIN" ]]; then
   "$SING_BOX_INSTALL_SCRIPT"
 fi
 
+# Preserve the effective SSH listener before any hardening changes are applied.
+SSH_CURRENT_PORT=$(sshd -T 2>/dev/null | awk '$1 == "port" { print $2; exit }' || true)
+if [[ -n "$SSH_CURRENT_PORT" && "$SSH_CURRENT_PORT" =~ ^[0-9]+$ ]]; then
+  SSH_PORT=$SSH_CURRENT_PORT
+else
+  SSH_PORT=${SSH_PORT:-22}
+fi
+
+runtime_set_value() {
+  local name=$1 value=$2 file=$3 tmp found=0
+  tmp=$(mktemp "$(dirname "$file")/.vps-gateway-runtime.XXXXXX")
+  trap 'rm -f "$tmp"' RETURN
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$name="* ]]; then
+      printf '%s=%s\n' "$name" "$value" >> "$tmp"
+      found=1
+    else
+      printf '%s\n' "$line" >> "$tmp"
+    fi
+  done < "$file"
+  if [[ "$found" == 0 ]]; then
+    printf '%s=%s\n' "$name" "$value" >> "$tmp"
+  fi
+  if [[ "$(id -u)" == 0 ]]; then
+    chown root:root "$tmp"
+  fi
+  chmod 0600 "$tmp"
+  mv "$tmp" "$file"
+  trap - RETURN
+}
+
 if [[ ! -f "$RUNTIME_FILE" ]]; then
   printf '%s\n' 'bootstrap: generating new gateway credentials'
   RUNTIME_FILE="$RUNTIME_FILE" CLIENT_INFO_FILE="$CLIENT_INFO_FILE" SING_BOX_BIN="$SING_BOX_BIN" \
+    SOCKS_USERNAME="${SOCKS_USERNAME:-gateway}" SERVER_ADDRESS="" \
     "$GENERATE_SCRIPT"
 else
   printf '%s\n' "bootstrap: preserving existing runtime credentials: $RUNTIME_FILE"
+  # Older runtime files may predate transport credentials. Add only the missing
+  # derived secret; never rotate an existing credential implicitly.
+  if ! grep -q '^TRANSPORT_PASSWORD=' "$RUNTIME_FILE"; then
+    TRANSPORT_PASSWORD=$(openssl rand -hex 24)
+    runtime_set_value TRANSPORT_PASSWORD "$TRANSPORT_PASSWORD" "$RUNTIME_FILE"
+    printf '%s\n' 'bootstrap: added missing transport credential to existing runtime'
+  fi
 fi
+
+runtime_set_value SSH_PORT "$SSH_PORT" "$RUNTIME_FILE"
 
 if [[ "${ENABLE_CLOUDFLARED:-false}" == true ]]; then
   cloudflare_token_present=0
@@ -125,29 +196,8 @@ if [[ "${ENABLE_CLOUDFLARED:-false}" == true ]]; then
       printf 'bootstrap: Cloudflare tunnel token cannot be empty\n' >&2
       exit 1
     }
-
-    runtime_tmp=$(mktemp "$(dirname "$RUNTIME_FILE")/.vps-gateway-runtime.XXXXXX")
-    cleanup_runtime_tmp() { rm -f "$runtime_tmp"; }
-    trap cleanup_runtime_tmp EXIT
-    token_line_found=0
-    while IFS= read -r line || [[ -n "$line" ]]; do
-      if [[ "$line" == CLOUDFLARED_TUNNEL_TOKEN=* ]]; then
-        printf 'CLOUDFLARED_TUNNEL_TOKEN=%s\n' "$CLOUDFLARED_TUNNEL_TOKEN" >> "$runtime_tmp"
-        token_line_found=1
-      else
-        printf '%s\n' "$line" >> "$runtime_tmp"
-      fi
-    done < "$RUNTIME_FILE"
-    if [[ "$token_line_found" == 0 ]]; then
-      printf 'CLOUDFLARED_TUNNEL_TOKEN=%s\n' "$CLOUDFLARED_TUNNEL_TOKEN" >> "$runtime_tmp"
-    fi
-    if [[ "$(id -u)" == 0 ]]; then
-      chown root:root "$runtime_tmp"
-    fi
-    chmod 0600 "$runtime_tmp"
-    mv "$runtime_tmp" "$RUNTIME_FILE"
+    runtime_set_value CLOUDFLARED_TUNNEL_TOKEN "$CLOUDFLARED_TUNNEL_TOKEN" "$RUNTIME_FILE"
     unset CLOUDFLARED_TUNNEL_TOKEN
-    trap - EXIT
     printf '%s\n' 'bootstrap: Cloudflare tunnel token stored in protected runtime file'
   else
     printf '%s\n' 'bootstrap: existing Cloudflare tunnel token detected; prompt skipped'
@@ -163,28 +213,7 @@ if [[ "${ENABLE_DNS_STEERING:-false}" == true ]]; then
     printf '%s\n' 'bootstrap: public IPv4 detection returned an empty value' >&2
     exit 1
   }
-
-  runtime_tmp=$(mktemp "$(dirname "$RUNTIME_FILE")/.vps-gateway-runtime.XXXXXX")
-  cleanup_runtime_tmp() { rm -f "$runtime_tmp"; }
-  trap cleanup_runtime_tmp EXIT
-  ipv4_line_found=0
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" == SNIPROXY_PUBLIC_IPV4=* ]]; then
-      printf 'SNIPROXY_PUBLIC_IPV4=%s\n' "$SERVER_IPV4" >> "$runtime_tmp"
-      ipv4_line_found=1
-    else
-      printf '%s\n' "$line" >> "$runtime_tmp"
-    fi
-  done < "$RUNTIME_FILE"
-  if [[ "$ipv4_line_found" == 0 ]]; then
-    printf 'SNIPROXY_PUBLIC_IPV4=%s\n' "$SERVER_IPV4" >> "$runtime_tmp"
-  fi
-  if [[ "$(id -u)" == 0 ]]; then
-    chown root:root "$runtime_tmp"
-  fi
-  chmod 0600 "$runtime_tmp"
-  mv "$runtime_tmp" "$RUNTIME_FILE"
-  trap - EXIT
+  runtime_set_value SNIPROXY_PUBLIC_IPV4 "$SERVER_IPV4" "$RUNTIME_FILE"
   printf 'bootstrap: discovered public IPv4: %s\n' "$SERVER_IPV4"
 else
   printf '%s\n' 'bootstrap: DNS steering disabled by profile; public IPv4 discovery for sniproxy skipped'
@@ -194,18 +223,18 @@ printf '%s\n' 'bootstrap: validating completed runtime configuration'
 PROFILE="$PROFILE" RUNTIME_FILE="$RUNTIME_FILE" CLIENT_INFO_FILE="$CLIENT_INFO_FILE" "$VALIDATE_SCRIPT"
 
 printf '%s\n' 'bootstrap: detecting client-facing server address'
-SERVER_ADDRESS=$("$DETECT_SCRIPT")
+SERVER_ADDRESS=$(SERVER_ADDRESS_PREFERENCE=ipv4 "$DETECT_SCRIPT")
 
 client_info_tmp=$(mktemp "$(dirname "$CLIENT_INFO_FILE")/.vps-gateway-client-info.XXXXXX")
 cleanup_client_info_tmp() { rm -f "$client_info_tmp"; }
 trap cleanup_client_info_tmp EXIT
 
 while IFS= read -r line || [[ -n "$line" ]]; do
-  if [[ "$line" == SERVER=* ]]; then
-    printf 'SERVER=%s\n' "$SERVER_ADDRESS" >> "$client_info_tmp"
-  else
-    printf '%s\n' "$line" >> "$client_info_tmp"
-  fi
+  case "$line" in
+    SERVER=*) printf 'SERVER=%s\n' "$SERVER_ADDRESS" >> "$client_info_tmp" ;;
+    PORT=*) printf 'PORT=%s\n' "$VLESS_PORT" >> "$client_info_tmp" ;;
+    *) printf '%s\n' "$line" >> "$client_info_tmp" ;;
+  esac
 done < "$CLIENT_INFO_FILE"
 
 if [[ "$(id -u)" == 0 ]]; then
@@ -216,11 +245,11 @@ mv "$client_info_tmp" "$CLIENT_INFO_FILE"
 trap - EXIT
 
 printf '%s\n' 'bootstrap: starting gateway deployment'
-"$DEPLOY_SCRIPT" --profile "$PROFILE" --env-file "$RUNTIME_FILE"
+SSH_PORT="$SSH_PORT" PROFILE="$PROFILE" "$DEPLOY_SCRIPT" --profile "$PROFILE" --env-file "$RUNTIME_FILE"
 
 printf '%s\n' 'bootstrap: deployment status: success'
 if command -v "$SYSTEMCTL_BIN" >/dev/null 2>&1; then
-  for service in sing-box.service cloudflared.service; do
+  for service in sing-box.service cloudflared.service sniproxy.service; do
     state=$(
       "$SYSTEMCTL_BIN" is-active "$service" 2>/dev/null || true
     )
