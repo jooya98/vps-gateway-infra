@@ -34,7 +34,6 @@ PROFILE_FILE="$ROOT/config/profiles/$PROFILE.env.example"
   exit 1
 }
 
-# Load non-secret profile flags before deciding which runtime inputs are needed.
 set -a
 # shellcheck disable=SC1091
 source "$ROOT/config/defaults.env.example"
@@ -54,7 +53,6 @@ for file in "${required_files[@]}"; do
   [[ -f "$file" ]] || { printf 'bootstrap: required file missing: %s\n' "$file" >&2; exit 1; }
 done
 
-# Load only non-secret version settings before installing sing-box.
 if [[ -f "$ROOT/config/versions.env.example" ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -104,17 +102,14 @@ else
   printf '%s\n' "bootstrap: preserving existing runtime credentials: $RUNTIME_FILE"
 fi
 
-# External credentials are prompted only when the selected profile actually enables them.
 if [[ "${ENABLE_CLOUDFLARED:-false}" == true ]]; then
   cloudflare_token_present=0
-  if [[ -f "$RUNTIME_FILE" ]]; then
-    while IFS= read -r line; do
-      if [[ "$line" == CLOUDFLARED_TUNNEL_TOKEN=* && -n "${line#*=}" ]]; then
-        cloudflare_token_present=1
-        break
-      fi
-    done < "$RUNTIME_FILE"
-  fi
+  while IFS= read -r line; do
+    if [[ "$line" == CLOUDFLARED_TUNNEL_TOKEN=* && -n "${line#*=}" ]]; then
+      cloudflare_token_present=1
+      break
+    fi
+  done < "$RUNTIME_FILE"
 
   if [[ "$cloudflare_token_present" == 0 ]]; then
     printf '%s\n' 'Cloudflare tunnel token is required for this profile.' >&2
@@ -161,9 +156,6 @@ else
   printf '%s\n' 'bootstrap: Cloudflare tunnel disabled by profile; token input skipped'
 fi
 
-printf '%s\n' 'bootstrap: validating runtime credentials'
-PROFILE="$PROFILE" RUNTIME_FILE="$RUNTIME_FILE" CLIENT_INFO_FILE="$CLIENT_INFO_FILE" "$VALIDATE_SCRIPT"
-
 if [[ "${ENABLE_DNS_STEERING:-false}" == true ]]; then
   printf '%s\n' 'bootstrap: detecting public IPv4 for DNS steering'
   SERVER_IPV4=$(SERVER_ADDRESS_MODE=ipv4 SERVER_ADDRESS_PREFERENCE=ipv4 "$DETECT_SCRIPT")
@@ -194,6 +186,8 @@ if [[ "${ENABLE_DNS_STEERING:-false}" == true ]]; then
   mv "$runtime_tmp" "$RUNTIME_FILE"
   trap - EXIT
   printf 'bootstrap: discovered public IPv4: %s\n' "$SERVER_IPV4"
+else
+  printf '%s\n' 'bootstrap: DNS steering disabled by profile; public IPv4 discovery for sniproxy skipped'
 fi
 
 printf '%s\n' 'bootstrap: validating completed runtime configuration'
