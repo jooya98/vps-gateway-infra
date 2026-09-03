@@ -24,4 +24,7 @@ if [[ "$DRY_RUN" == 0 ]]; then
 else
  "$ROOT/scripts/apply-firewall.sh" --dry-run >/dev/null
 fi
+if [[ "$DRY_RUN" == 0 && -x "$ROOT/scripts/generate-client-configs.sh" ]]; then
+ "$ROOT/scripts/generate-client-configs.sh"
+fi
 printf 'deploy: deployment complete (profile=%s)\n' "$PROFILE"
