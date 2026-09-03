@@ -16,7 +16,6 @@ fail() {
 [[ -f "$ROOT/config/defaults.env.example" ]] || fail 'defaults file not found'
 [[ -f "$ROOT/config/profiles/$PROFILE.env.example" ]] || fail "profile not found: $PROFILE"
 
-# Load only feature flags/defaults. Secrets are loaded separately below.
 set -a
 # shellcheck disable=SC1091
 source "$ROOT/config/defaults.env.example"
@@ -42,10 +41,12 @@ set +u
 source "$RUNTIME_FILE"
 set -u
 
-required=(VLESS_UUID REALITY_PRIVATE_KEY REALITY_SHORT_ID SOCKS_USERNAME SOCKS_PASSWORD)
+required=(VLESS_UUID REALITY_PRIVATE_KEY REALITY_SHORT_ID SOCKS_USERNAME SOCKS_PASSWORD SSH_PORT)
 for name in "${required[@]}"; do
   [[ -n "${!name:-}" ]] || fail "$name is missing or empty"
 done
+[[ "$SSH_PORT" =~ ^[1-9][0-9]{0,4}$ ]] || fail 'SSH_PORT format is invalid'
+(( SSH_PORT <= 65535 )) || fail 'SSH_PORT is outside TCP port range'
 
 if [[ "${ENABLE_SHADOWSOCKS:-false}" == true || "${ENABLE_VMESS:-false}" == true || "${ENABLE_TROJAN:-false}" == true || "${ENABLE_HYSTERIA2:-false}" == true || "${ENABLE_TUIC:-false}" == true ]]; then
   [[ -n "${TRANSPORT_PASSWORD:-}" ]] || fail 'TRANSPORT_PASSWORD is missing or empty'
