@@ -8,7 +8,7 @@
       "type": "vless",
       "tag": "vless-reality",
       "listen": "${REALITY_LISTEN_ADDRESS}",
-      "listen_port": ${REALITY_PORT},
+      "listen_port": ${VLESS_PORT},
       "users": [
         {
           "name": "personal",
@@ -64,7 +64,7 @@
       "listen": "${SHADOWSOCKS_LISTEN_ADDRESS}",
       "listen_port": ${SHADOWSOCKS_PORT},
       "method": "chacha20-ietf-poly1305",
-      "password": "${SHADOWSOCKS_PASSWORD}"
+      "password": "${TRANSPORT_PASSWORD}"
     },
     {
       "type": "shadowsocks",
