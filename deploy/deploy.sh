@@ -30,6 +30,8 @@ if [[ "$DRY_RUN" == 0 ]]; then
 fi
 [[ -x "$SING_BOX_BIN" ]] || "$ROOT/scripts/install-sing-box.sh"
 if [[ "$DRY_RUN" == 0 ]]; then
+  ADMIN_USER=${ADMIN_USER:?bootstrap must provide ADMIN_USER}
+  ADMIN_USER="$ADMIN_USER" "$ROOT/scripts/create-admin-user.sh"
   "$ROOT/scripts/install-ssh-hardening.sh"
   [[ -x "$CLOUDFLARED_BIN" ]] || "$ROOT/scripts/install-cloudflared.sh"
   PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" "$ROOT/scripts/provision-cloudflare.sh"
