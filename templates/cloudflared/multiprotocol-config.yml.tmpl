@@ -1,0 +1,15 @@
+tunnel: ${CLOUDFLARED_TUNNEL_ID}
+credentials-file: ${CLOUDFLARED_CREDENTIALS_PATH}
+
+# One hostname, multiple path-based origins. cloudflared preserves the path.
+ingress:
+  - hostname: ${PUBLIC_HOSTNAME}
+    path: ^/vless-ws$
+    service: http://127.0.0.1:${VLESS_WS_PORT}
+  - hostname: ${PUBLIC_HOSTNAME}
+    path: ^/vmess-ws$
+    service: http://127.0.0.1:${VMESS_WS_PORT}
+  - hostname: ${PUBLIC_HOSTNAME}
+    path: ^/vless-hu$
+    service: http://127.0.0.1:${VLESS_HTTPUPGRADE_PORT}
+  - service: http_status:404
