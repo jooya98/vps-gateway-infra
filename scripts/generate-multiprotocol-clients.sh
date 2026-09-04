@@ -27,7 +27,7 @@ USER_HOME=$(getent passwd "$CLIENT_USER" | cut -d: -f6); [[ -d "$USER_HOME" ]] |
 OUT_DIR="$USER_HOME/vpn-client"; TMP_DIR=$(mktemp -d /tmp/joohar-client-bundle.XXXXXX); trap 'rm -rf "$TMP_DIR"' EXIT; chmod 0700 "$TMP_DIR"
 SERVER_IP=${PUBLIC_IPV4:-}; [[ -n "$SERVER_IP" ]] || SERVER_IP=$(curl -4 -fsS https://api.ipify.org || true); [[ -n "$SERVER_IP" ]] || fail 'could not determine public IPv4'
 python3 - "$CONFIG_FILE" "$TMP_DIR" "$SERVER_IP" "$PUBLIC_HOSTNAME" "$DIRECT_HOSTNAME" <<'PY'
-import base64,json,sys,urllib.parse
+import base64,json,os,sys,urllib.parse
 from pathlib import Path
 config_path,out_dir,server_ip,host_cf,direct_host=sys.argv[1:]
 out=Path(out_dir); config=json.loads(Path(config_path).read_text()); by_tag={x.get('tag'):x for x in config.get('inbounds',[])}
@@ -46,7 +46,7 @@ hu=by_tag.get('vless-httpupgrade')
 if hu: links.append(write('vless-httpupgrade.txt',f"vless://{q(uuid)}@{host_cf}:443?encryption=none&security=tls&sni={q(host_cf)}&type=httpupgrade&host={q(host_cf)}&path={q(hu.get('transport',{}).get('path','/vless-hu'))}#Echo-VLESS-HTTPUpgrade"))
 vm=by_tag.get('vmess-ws')
 if vm: links.append(write('vmess-ws.txt',vmess(host_cf,443,uuid,host_cf,vm.get('transport',{}).get('path','/vmess-ws'),host_cf)))
-ss=by_tag.get('shadowsocks');
+ss=by_tag.get('shadowsocks')
 if ss:
  enc=base64.urlsafe_b64encode(f"{ss.get('method','chacha20-ietf-poly1305')}:{ss.get('password','')}".encode()).decode().rstrip('='); links.append(write('shadowsocks.txt',f"ss://{enc}@{server_ip}:{ss.get('listen_port',8444)}#Echo-SS"))
 ss2=by_tag.get('shadowsocks-2022')
