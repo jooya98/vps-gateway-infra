@@ -1,0 +1,82 @@
+# Explicit, service-level inventory for private DNS steering.
+# One FQDN or service domain per line. Subdomains are matched by sniproxy's
+# suffix ACL. Keep broad shared domains (google.com, microsoft.com, cloudflare.com)
+# out unless a concrete endpoint requires them.
+
+# OpenAI / ChatGPT
+openai.com
+chatgpt.com
+api.openai.com
+auth.openai.com
+platform.openai.com
+
+# Anthropic / Claude
+anthropic.com
+claude.ai
+api.anthropic.com
+console.anthropic.com
+
+# Google AI / Gemini
+gemini.google.com
+aistudio.google.com
+ai.google.dev
+generativelanguage.googleapis.com
+
+# Mistral
+mistral.ai
+chat.mistral.ai
+console.mistral.ai
+api.mistral.ai
+
+# Qwen / Alibaba
+qwen.ai
+chat.qwen.ai
+dashscope.aliyuncs.com
+dashscope-intl.aliyuncs.com
+
+# DeepSeek
+deepseek.com
+chat.deepseek.com
+platform.deepseek.com
+api.deepseek.com
+
+# xAI
+x.ai
+grok.com
+api.x.ai
+
+# NVIDIA
+nvidia.com
+build.nvidia.com
+integrate.api.nvidia.com
+
+# Ollama
+ollama.com
+api.ollama.com
+
+# Hugging Face
+huggingface.co
+router.huggingface.co
+
+# Other concrete AI API endpoints
+api.groq.com
+groq.com
+cerebras.ai
+api.cerebras.ai
+openrouter.ai
+api.openrouter.ai
+cohere.com
+api.cohere.com
+api.cloudflare.com
+z.ai
+zhipuai.cn
+api.z.ai
+siliconflow.cn
+api.siliconflow.cn
+modelscope.cn
+qianfan.baidubce.com
+volcengine.com
+api.volcengine.com
+pollinations.ai
+llm7.io
+opencode.ai

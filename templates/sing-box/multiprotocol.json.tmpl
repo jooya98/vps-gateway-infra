@@ -8,7 +8,7 @@
       "type": "vless",
       "tag": "vless-reality",
       "listen": "${REALITY_LISTEN_ADDRESS}",
-      "listen_port": ${REALITY_PORT},
+      "listen_port": ${VLESS_PORT},
       "users": [
         {
           "name": "personal",
@@ -35,22 +35,15 @@
       "tag": "vless-ws",
       "listen": "127.0.0.1",
       "listen_port": ${VLESS_WS_PORT},
-      "users": [
-        {"name": "personal", "uuid": "${VLESS_UUID}"}
-      ],
-      "transport": {
-        "type": "ws",
-        "path": "${VLESS_WS_PATH}"
-      }
+      "users": [{"name": "personal", "uuid": "${VLESS_UUID}"}],
+      "transport": {"type": "ws", "path": "${VLESS_WS_PATH}"}
     },
     {
       "type": "vless",
       "tag": "vless-httpupgrade",
       "listen": "127.0.0.1",
       "listen_port": ${VLESS_HTTPUPGRADE_PORT},
-      "users": [
-        {"name": "personal", "uuid": "${VLESS_UUID}"}
-      ],
+      "users": [{"name": "personal", "uuid": "${VLESS_UUID}"}],
       "transport": {
         "type": "httpupgrade",
         "host": "${PUBLIC_HOSTNAME}",
@@ -62,13 +55,8 @@
       "tag": "vmess-ws",
       "listen": "127.0.0.1",
       "listen_port": ${VMESS_WS_PORT},
-      "users": [
-        {"name": "personal", "uuid": "${VLESS_UUID}", "alterId": 0}
-      ],
-      "transport": {
-        "type": "ws",
-        "path": "${VMESS_WS_PATH}"
-      }
+      "users": [{"name": "personal", "uuid": "${VLESS_UUID}", "alterId": 0}],
+      "transport": {"type": "ws", "path": "${VMESS_WS_PATH}"}
     },
     {
       "type": "shadowsocks",
@@ -76,7 +64,7 @@
       "listen": "${SHADOWSOCKS_LISTEN_ADDRESS}",
       "listen_port": ${SHADOWSOCKS_PORT},
       "method": "chacha20-ietf-poly1305",
-      "password": "${SHADOWSOCKS_PASSWORD}"
+      "password": "${TRANSPORT_PASSWORD}"
     },
     {
       "type": "shadowsocks",
@@ -92,21 +80,15 @@
       "tag": "socks5",
       "listen": "${SOCKS_LISTEN_ADDRESS}",
       "listen_port": ${SOCKS_LISTEN_PORT},
-      "users": [
-        {"username": "${SOCKS_USERNAME}", "password": "${SOCKS_PASSWORD}"}
-      ]
+      "users": [{"username": "${SOCKS_USERNAME}", "password": "${SOCKS_PASSWORD}"}]
     },
     {
       "type": "http",
       "tag": "http-proxy",
       "listen": "${HTTP_LISTEN_ADDRESS}",
       "listen_port": ${HTTP_PORT},
-      "users": [
-        {"username": "${SOCKS_USERNAME}", "password": "${SOCKS_PASSWORD}"}
-      ]
+      "users": [{"username": "${SOCKS_USERNAME}", "password": "${SOCKS_PASSWORD}"}]
     }${DIRECT_TLS_INBOUNDS}
   ],
-  "outbounds": [
-    {"type": "direct", "tag": "direct"}
-  ]
+  "outbounds": [{"type": "direct", "tag": "direct"}]
 }

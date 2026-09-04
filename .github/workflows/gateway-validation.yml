@@ -1,0 +1,25 @@
+name: gateway-validation
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  resilient:
+    runs-on: ubuntu-latest
+    container: debian:stable-slim
+    steps:
+      - name: Install test dependencies
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash coreutils findutils grep python3 jq ca-certificates curl tar ufw dnsutils
+      - uses: actions/checkout@v4
+      - name: Validate repository
+        run: ./scripts/validate-repository.sh
+      - name: Install pinned sing-box for config acceptance
+        run: SING_BOX_VERSION=1.13.18 ./scripts/install-sing-box.sh
+      - name: Install pinned sniproxy for runtime behavior
+        run: SNIPROXY_VERSION=2.4.1 ./scripts/install-sniproxy.sh
+      - name: Render and test resilient profile
+        run: ./tests/test-resilient.sh
+      - name: Exercise real sniproxy DNS and HTTPS path
+        run: ./tests/test-sniproxy-runtime.sh

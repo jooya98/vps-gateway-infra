@@ -1,71 +1,72 @@
-# Echo multi-protocol gateway
+# Echo comprehensive gateway
 
-This layer is intentionally additive. Pulling the repository does **not** change a live VPS. Do not rerun `bootstrap.sh` or `deploy/deploy.sh` merely to test this feature.
-
-## Design
-
-The existing Echo listeners are preserved by `scripts/activate-multiprotocol.sh`:
-
-- VLESS + Reality + Vision: the currently deployed listen address/port and credentials are detected from the live config/runtime.
-- Legacy Shadowsocks: the currently deployed listen address/port and password are preserved.
-- SOCKS5: the currently deployed listen address/port and credentials are preserved.
-
-Additional listeners:
-
-| Protocol | Origin/listen | Default | Exposure |
-|---|---|---:|---|
-| VLESS + WebSocket | `127.0.0.1:18080` | enabled | Cloudflare Tunnel |
-| VMess + WebSocket | `127.0.0.1:18081` | enabled | Cloudflare Tunnel |
-| VLESS + HTTPUpgrade | `127.0.0.1:18082` | enabled | Cloudflare Tunnel / compatibility |
-| Shadowsocks 2022 | `:::8445` | enabled | direct TCP/UDP |
-| Hysteria2 | `:::8446` | optional | direct UDP + TLS |
-| TUIC | `:::8447` | optional | direct UDP + TLS |
-| Trojan | `:::8448` | optional | direct TCP + TLS |
-| AnyTLS | `:::8449` | optional | direct TCP + TLS |
-| VLESS + gRPC | `:::8450` | optional | direct TCP + TLS |
-
-The optional TLS/QUIC family is disabled until a real certificate/key pair is available. Set `ENABLE_DIRECT_TLS=1`, `TLS_CERT_PATH`, and `TLS_KEY_PATH` before activation when those endpoints are ready.
-
-## Cloudflare Tunnel
-
-For `echo.engine.qzz.io`, keep the existing token-based `cloudflared` service. Add published application routes in the Cloudflare Tunnel dashboard:
-
-- `echo.engine.qzz.io` + path `/vless-ws` -> `http://127.0.0.1:18080`
-- `echo.engine.qzz.io` + path `/vmess-ws` -> `http://127.0.0.1:18081`
-- `echo.engine.qzz.io` + path `/vless-hu` -> `http://127.0.0.1:18082`
-
-The public side is HTTPS on 443; the origin services stay loopback-only. Cloudflare Tunnel supports WebSockets. Public-hostname gRPC is currently not supported by Cloudflare Tunnel, so the gRPC listener remains a direct TLS endpoint rather than being put behind the Tunnel.
-
-Do **not** move the Reality listener behind the Tunnel: Reality expects its own TLS handshake and is not equivalent to an HTTP/WebSocket origin behind Cloudflare termination.
-
-## Safe activation on an existing VPS
-
-First validate without changing the live service:
+The repository has one production profile and one public installation entrypoint:
 
 ```bash
-cd /opt/vps-gateway-infra
-git pull --ff-only
-sudo DRY_RUN=1 bash scripts/activate-multiprotocol.sh
+sudo bash bootstrap.sh
 ```
 
-If validation succeeds, activate:
+There are no separate activation commands. Bootstrap collects host-specific values, preserves existing state, and invokes the helper scripts internally.
 
-```bash
-sudo bash scripts/activate-multiprotocol.sh
+## Listener model
+
+| Protocol | Listen | Exposure |
+|---|---|---|
+| VLESS + Reality + Vision | `0.0.0.0:8443` | direct IPv4 |
+| Shadowsocks | `0.0.0.0:8444` | direct IPv4 |
+| Shadowsocks 2022 | `0.0.0.0:8445` | direct IPv4 |
+| Hysteria2 | `0.0.0.0:8446` | direct UDP + TLS |
+| TUIC | `0.0.0.0:8447` | direct UDP + TLS |
+| Trojan | `0.0.0.0:8448` | direct TCP + TLS |
+| AnyTLS | `0.0.0.0:8449` | direct TCP + TLS |
+| VLESS + gRPC | `0.0.0.0:8450` | direct TCP + TLS |
+| SOCKS5 | `0.0.0.0:1080` | direct IPv4, authenticated |
+| HTTP proxy | `0.0.0.0:8080` | direct IPv4, authenticated |
+| VLESS + WebSocket | `127.0.0.1:18080` | Cloudflare Tunnel |
+| VMess + WebSocket | `127.0.0.1:18081` | Cloudflare Tunnel |
+| VLESS + HTTPUpgrade | `127.0.0.1:18082` | Cloudflare Tunnel |
+
+## Cloudflare
+
+The installation uses a locally-managed Cloudflare Tunnel. The interactive bootstrap collects the API token, account ID, zone, public hostname, direct hostname, and tunnel name, then stores the resulting runtime inputs in the root-only runtime file.
+
+The public hostname is proxied through Cloudflare:
+
+```text
+echo.engine.qzz.io
+  /vless-ws  -> 127.0.0.1:18080
+  /vmess-ws  -> 127.0.0.1:18081
+  /vless-hu  -> 127.0.0.1:18082
 ```
 
-The script:
+The direct hostname is deliberately DNS-only:
 
-1. Reads the existing runtime credentials.
-2. Detects the live Reality/Shadowsocks/SOCKS listeners from the current config.
-3. Generates new protocol credentials only once in `/root/vps-gateway-multiprotocol.conf`.
-4. Validates the complete generated config with `sing-box check`.
-5. Backs up `/etc/sing-box/config.json`.
-6. Atomically installs the new config and restarts only `sing-box.service`.
-7. Automatically restores the previous config if the new service fails to start.
+```text
+direct.echo.engine.qzz.io -> Echo public IPv4
+```
 
-It does **not** install packages, alter SSH hardening, modify UFW, modify the Cloudflare token, or run the full bootstrap/deploy workflow.
+That separation is required because the raw TCP/UDP transports are not served through the HTTP Tunnel ingress path.
 
-## Firewall
+## TLS
 
-The activation script deliberately does not modify firewall policy. This avoids turning a pull/test into a network-policy mutation. The Cloudflare-backed WebSocket endpoints require no new public origin port. Before enabling the direct TLS/QUIC family, explicitly add the required TCP/UDP ports to the firewall policy and verify them independently.
+Bootstrap creates the direct hostname DNS record before requesting a trusted Let's Encrypt certificate through Cloudflare DNS-01. The certificate covers both public hostnames and is copied to the paths consumed by sing-box.
+
+Certbot keeps the Cloudflare credential file root-only and reuses it for renewal. The Certbot Cloudflare plugin supports restricted API tokens and requires DNS editing access for the managed zone. citeturn320645search12
+
+## State and idempotency
+
+Gateway credentials are generated once. Existing runtime credentials are preserved. Existing Cloudflare Tunnel state is reused when it matches the configured account and tunnel. Existing DNS records are validated; conflicting records fail instead of being silently replaced.
+
+Sing-box configuration is validated before activation and the previous configuration is backed up before replacement.
+
+## Client bundle
+
+Bootstrap generates the complete bundle under the selected normal user's home directory:
+
+```text
+/home/<user>/vpn-client/
+```
+
+It includes per-protocol files and aggregated import artifacts for v2rayN and other clients.
+
+The generator reads the live sing-box configuration, so the final client parameters come from the active service rather than a second manually maintained configuration source.

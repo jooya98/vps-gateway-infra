@@ -1,102 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-# generate-client-profiles.sh
-# Generates three client artifacts:
-#   1. v2rayN JSON configuration
-#   2. mihomo YAML configuration
-#   3. VLESS URI for Reality clients
-# Reads a runtime file and a client‑info file, validates required variables,
-# builds the artifacts, ensures 0600 permissions, and optionally sets root ownership.
-
-fail() {
-  printf 'generate-client-profiles: %s\n' "$1" >&2
-  exit 1
-}
-
-# Default file locations (production layout)
-RUNTIME_FILE=${RUNTIME_FILE:-/root/vps-gateway-runtime.conf}
-CLIENT_INFO_FILE=${CLIENT_INFO_FILE:-/root/vps-gateway-client-info.txt}
-V2RAYN_FILE=${V2RAYN_FILE:-/root/vps-gateway-v2rayn.json}
-MIHOMO_FILE=${MIHOMO_FILE:-/root/vps-gateway-mihomo.yaml}
-VLESS_FILE=${VLESS_FILE:-/root/vps-gateway-vless.txt}
-
-[[ -f "$RUNTIME_FILE" ]] || fail "runtime file not found: $RUNTIME_FILE"
-[[ -f "$CLIENT_INFO_FILE" ]] || fail "client info file not found: $CLIENT_INFO_FILE"
-
-# Load variables
-set +u
-source "$RUNTIME_FILE"
-source "$CLIENT_INFO_FILE"
-set -u
-
-# Required variables
-required_runtime=(VLESS_UUID REALITY_PRIVATE_KEY REALITY_SHORT_ID SOCKS_USERNAME SOCKS_PASSWORD CLOUDFLARED_TUNNEL_TOKEN)
-required_client=(SERVER PORT UUID REALITY_PUBLIC_KEY REALITY_SHORT_ID FLOW SNI)
-for name in "${required_runtime[@]}"; do
-  [[ -n "${!name:-}" ]] || fail "$name is missing or empty"
- done
-for name in "${required_client[@]}"; do
-  [[ -n "${!name:-}" ]] || fail "$name is missing or empty"
- done
-
-# Basic validation
-[[ "$SERVER" =~ ^[0-9a-fA-F:.]+$ ]] || fail 'SERVER must be an IP address'
-[[ "$PORT" =~ ^[0-9]+$ ]] || fail 'PORT must be a number'
-[[ "$UUID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[789abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]] || fail 'UUID format is invalid'
-[[ "$REALITY_PUBLIC_KEY" =~ ^[A-Za-z0-9_=-]+$ ]] || fail 'REALITY_PUBLIC_KEY format is invalid'
-[[ "$REALITY_SHORT_ID" =~ ^[0-9a-fA-F]{2,64}$ ]] || fail 'REALITY_SHORT_ID format is invalid'
-[[ "$FLOW" =~ ^[A-Za-z0-9_-]+$ ]] || fail 'FLOW format is invalid'
-[[ "$SNI" =~ ^[A-Za-z0-9.-]+$ ]] || fail 'SNI format is invalid'
-
-# Prepare temporary files in same directories as final outputs
-runtime_dir=$(dirname "$RUNTIME_FILE")
-client_dir=$(dirname "$CLIENT_INFO_FILE")
-install -d -m 0700 "$runtime_dir" "$client_dir"
-
-v2rayn_tmp=$(mktemp "$runtime_dir/.vps-gateway-v2rayn.XXXXXX")
-mihomo_tmp=$(mktemp "$runtime_dir/.vps-gateway-mihomo.XXXXXX")
-vless_tmp=$(mktemp "$runtime_dir/.vps-gateway-vless.XXXXXX")
-chmod 0600 "$v2rayn_tmp" "$mihomo_tmp" "$vless_tmp"
-
-# v2rayN JSON
-cat > "$v2rayn_tmp" <<EOF
-{
-  "v": "2",
-  "ps": "VPS Gateway",
-  "add": "$SERVER",
-  "port": "$PORT",
-  "id": "$UUID",
-  "aid": "0",
-  "net": "tcp",
-  "type": "none",
-  "host": "",
-  "path": "",
-  "tls": "tls",
-  "sni": "$SNI",
-  "alpn": "",
-  "fp": "",
-  "pbk": "$REALITY_PUBLIC_KEY",
-  "sid": "$REALITY_SHORT_ID",
-  "spx": "/",
-  "scy": "none",
-  "flow": "$FLOW",
-  "serverName": "",
-  "udp": false
-}
+fail(){ printf 'generate-client-profiles: %s\n' "$1" >&2; exit 1; }
+RUNTIME_FILE=${RUNTIME_FILE:-/root/vps-gateway-runtime.conf}; CLIENT_INFO_FILE=${CLIENT_INFO_FILE:-/root/vps-gateway-client-info.txt}
+OUT_DIR=${OUT_DIR:-/root/vps-gateway-clients}; V2RAYN_FILE=${V2RAYN_FILE:-$OUT_DIR/v2rayn-vless.json}; MIHOMO_FILE=${MIHOMO_FILE:-$OUT_DIR/mihomo-vless.yaml}; VLESS_FILE=${VLESS_FILE:-$OUT_DIR/vless.txt}
+[[ -f "$RUNTIME_FILE" && -f "$CLIENT_INFO_FILE" ]] || fail 'runtime/client-info file missing'
+set +u; source "$RUNTIME_FILE"; source "$CLIENT_INFO_FILE"; set -u
+for n in SERVER REALITY_PUBLIC_KEY REALITY_SHORT_ID FLOW SNI VLESS_UUID; do [[ -n "${!n:-}" ]] || fail "$n is missing"; done
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd); PROFILE=${PROFILE:-default}; ENV_FILE=${ENV_FILE:-}
+set -a; source "$ROOT/config/defaults.env.example"; source "$ROOT/config/profiles/$PROFILE.env.example"; [[ -f "$ENV_FILE" ]] && source "$ENV_FILE"; set +a
+[[ -n "${VLESS_PORT:-${PORT:-}}" ]] || fail 'VLESS_PORT is missing'; mkdir -p "$OUT_DIR"; chmod 700 "$OUT_DIR"
+write(){ local f=$1; shift; umask 077; printf '%s\n' "$*" > "$f"; chmod 600 "$f"; }
+if [[ "$ENABLE_VLESS" == true ]]; then
+ host="$SERVER"; [[ "$SERVER" == *:* ]] && host="[$SERVER]"; uri="vless://${VLESS_UUID}@${host}:${VLESS_PORT}?type=tcp&security=reality&pbk=${REALITY_PUBLIC_KEY}&fp=chrome&sni=${SNI}&sid=${REALITY_SHORT_ID}&flow=${FLOW}#VPS-Gateway"
+ write "$VLESS_FILE" "$uri"; cp "$VLESS_FILE" "$OUT_DIR/vless.txt"
+ cat > "$V2RAYN_FILE" <<EOF
+{"v":"2","ps":"VPS Gateway VLESS","add":"$SERVER","port":"$VLESS_PORT","id":"$VLESS_UUID","aid":"0","net":"tcp","type":"none","tls":"tls","sni":"$SNI","pbk":"$REALITY_PUBLIC_KEY","sid":"$REALITY_SHORT_ID","flow":"$FLOW","udp":false}
 EOF
-
-# mihomo YAML
-cat > "$mihomo_tmp" <<EOF
-proxy-groups:
-- name: VPS Gateway
+ chmod 600 "$V2RAYN_FILE"
+ cat > "$MIHOMO_FILE" <<EOF
+proxies:
+- name: VPS Gateway VLESS
   type: vless
   server: $SERVER
-  port: $PORT
-  uuid: $UUID
+  port: $VLESS_PORT
+  uuid: $VLESS_UUID
   tls: true
   udp: false
-  skip-cert-verify: false
   reality-opts:
     public-key: $REALITY_PUBLIC_KEY
     short-id: $REALITY_SHORT_ID
@@ -104,32 +33,15 @@ proxy-groups:
   servername: $SNI
   flow: $FLOW
 EOF
-
-# VLESS URI (IPv6 handling)
-if [[ "$SERVER" =~ : ]]; then
-  vless_server="[$SERVER]"
-else
-  vless_server="$SERVER"
+ chmod 600 "$MIHOMO_FILE"
 fi
-vless_uri="vless://${UUID}@${vless_server}:${PORT}?type=tcp&security=reality&pbk=${REALITY_PUBLIC_KEY}&fp=chrome&sni=${SNI}&sid=${REALITY_SHORT_ID}&flow=${FLOW}#VPS-Gateway"
-cat > "$vless_tmp" <<EOF
-$vless_uri
+if [[ "$ENABLE_SHADOWSOCKS" == true ]]; then [[ -n "${TRANSPORT_PASSWORD:-}" ]] || fail 'TRANSPORT_PASSWORD required for Shadowsocks'; write "$OUT_DIR/shadowsocks.txt" "ss://$(printf '%s' "${SHADOWSOCKS_METHOD:-chacha20-ietf-poly1305}:$TRANSPORT_PASSWORD" | base64 -w0)@${SERVER}:${SHADOWSOCKS_PORT}#VPS-Gateway-SS"; fi
+if [[ "$ENABLE_VMESS" == true ]]; then cat > "$OUT_DIR/vmess.json" <<EOF
+{"v":"2","ps":"VPS Gateway VMess","add":"$SERVER","port":"$VMESS_PORT","id":"$VLESS_UUID","aid":"0","scy":"auto","net":"tcp","type":"none","host":"","path":"","tls":"tls","sni":"$TLS_SERVER_NAME"}
 EOF
-
-# Apply root ownership if running as root
-if [[ "$(id -u)" == 0 ]]; then
-  chown root:root "$v2rayn_tmp" "$mihomo_tmp" "$vless_tmp"
-fi
-chmod 0600 "$v2rayn_tmp" "$mihomo_tmp" "$vless_tmp"
-
-# Move to final locations
-mv "$v2rayn_tmp" "$V2RAYN_FILE"
-mv "$mihomo_tmp" "$MIHOMO_FILE"
-mv "$vless_tmp" "$VLESS_FILE"
-
-printf 'generate-client-profiles: generated v2rayN profile: %s\n' "$V2RAYN_FILE"
-printf 'generate-client-profiles: generated mihomo profile: %s\n' "$MIHOMO_FILE"
-printf 'generate-client-profiles: generated VLESS URI: %s\n' "$VLESS_FILE"
-printf '%s\n' 'generate-client-profiles: no private keys were printed'
-
-exit 0
+chmod 600 "$OUT_DIR/vmess.json"; fi
+if [[ "$ENABLE_TROJAN" == true ]]; then [[ -n "${TRANSPORT_PASSWORD:-}" ]] || fail 'TRANSPORT_PASSWORD required for Trojan'; write "$OUT_DIR/trojan.txt" "trojan://${TRANSPORT_PASSWORD}@${SERVER}:${TROJAN_PORT}?security=tls&sni=${TLS_SERVER_NAME}#VPS-Gateway-Trojan"; fi
+if [[ "$ENABLE_HYSTERIA2" == true ]]; then [[ -n "${TRANSPORT_PASSWORD:-}" ]] || fail 'TRANSPORT_PASSWORD required for Hysteria2'; write "$OUT_DIR/hysteria2.txt" "hysteria2://${TRANSPORT_PASSWORD}@${SERVER}:${HYSTERIA2_PORT}/?sni=${TLS_SERVER_NAME}#VPS-Gateway-Hysteria2"; fi
+if [[ "$ENABLE_TUIC" == true ]]; then [[ -n "${TRANSPORT_PASSWORD:-}" ]] || fail 'TRANSPORT_PASSWORD required for TUIC'; write "$OUT_DIR/tuic.txt" "tuic://${VLESS_UUID}:${TRANSPORT_PASSWORD}@${SERVER}:${TUIC_PORT}/?sni=${TLS_SERVER_NAME}&congestion_control=bbr#VPS-Gateway-TUIC"; fi
+printf 'generate-client-profiles: generated enabled transport artifacts under %s\n' "$OUT_DIR"
+printf '%s\n' 'generate-client-profiles: private keys and tunnel tokens were not written to client artifacts'
