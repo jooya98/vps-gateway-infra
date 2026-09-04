@@ -37,6 +37,10 @@ set +a
 # Preserve the live listener choices and credentials from the currently deployed config.
 # This is important because the runtime file is the bootstrap credential store,
 # while the live config is the final source of truth for what is actually active.
+#
+# Keep auto-export enabled while evaluating these assignments so the values are
+# visible to the Python renderer later in this script.
+set -a
 eval "$(python3 - "$CONFIG_FILE" <<'PY'
 import json, shlex, sys
 p=sys.argv[1]
@@ -79,6 +83,7 @@ for k,v in vals.items():
     print(f'{k}={shlex.quote(str(v))}')
 PY
 )"
+set +a
 
 # Generate additive protocol secrets once. Existing credentials are never rotated.
 if [[ ! -f "$MULTI_RUNTIME_FILE" ]]; then
