@@ -28,22 +28,22 @@ if [[ "$DRY_RUN" == 0 ]]; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3 ca-certificates curl tar openssl ufw python3-venv
   "$ROOT/deploy/backup.sh" create >/dev/null || true
 fi
-[[ -x "$SING_BOX_BIN" ]] || "$ROOT/scripts/install-sing-box.sh"
+[[ -x "$SING_BOX_BIN" ]] || bash "$ROOT/scripts/install-sing-box.sh"
 if [[ "$DRY_RUN" == 0 ]]; then
   ADMIN_USER=${ADMIN_USER:?bootstrap must provide ADMIN_USER}
-  ADMIN_USER="$ADMIN_USER" "$ROOT/scripts/create-admin-user.sh"
-  "$ROOT/scripts/install-ssh-hardening.sh"
-  [[ -x "$CLOUDFLARED_BIN" ]] || "$ROOT/scripts/install-cloudflared.sh"
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" "$ROOT/scripts/provision-cloudflare.sh"
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" "$ROOT/scripts/ensure-tls-certificate.sh"
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" "$ROOT/scripts/activate-multiprotocol.sh"
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" "$ROOT/scripts/apply-firewall.sh"
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" "$ROOT/scripts/generate-multiprotocol-clients.sh"
+  ADMIN_USER="$ADMIN_USER" bash "$ROOT/scripts/create-admin-user.sh"
+  bash "$ROOT/scripts/install-ssh-hardening.sh"
+  [[ -x "$CLOUDFLARED_BIN" ]] || bash "$ROOT/scripts/install-cloudflared.sh"
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/provision-cloudflare.sh"
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/ensure-tls-certificate.sh"
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/activate-multiprotocol.sh"
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/apply-firewall.sh"
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/generate-multiprotocol-clients.sh"
   systemctl --no-pager --quiet is-active sing-box.service
   systemctl --no-pager --quiet is-active cloudflared-echo.service
 else
-  if [[ -x "$CLOUDFLARED_BIN" ]]; then PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" DRY_RUN=1 "$ROOT/scripts/provision-cloudflare.sh"; fi
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" DRY_RUN=1 "$ROOT/scripts/activate-multiprotocol.sh"
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" DRY_RUN=1 "$ROOT/scripts/apply-firewall.sh"
+  if [[ -x "$CLOUDFLARED_BIN" ]]; then PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" DRY_RUN=1 bash "$ROOT/scripts/provision-cloudflare.sh"; fi
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" DRY_RUN=1 bash "$ROOT/scripts/activate-multiprotocol.sh"
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" DRY_RUN=1 bash "$ROOT/scripts/apply-firewall.sh"
 fi
 printf 'deploy: complete (profile=%s)\n' "$PROFILE"
