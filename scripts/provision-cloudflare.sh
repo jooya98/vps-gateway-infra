@@ -121,27 +121,28 @@ server_ipv4=${PUBLIC_IPV4:-}
 
 ensure_dns(){
   local name=$1 type=$2 content=$3 proxied=$4 ttl=$5
-  local data rid rtype rcontent rproxy
+  local data rid rtype rcontent rproxy parsed
   data=$(api GET "$CF_API/zones/$zone_id/dns_records?name=$name") || fail "failed to inspect DNS record: $name"
-  read -r rid rtype rcontent rproxy <<EOF
-$(python3 - "$data" <<'PY'
+  parsed=$(python3 - "$data" <<'PY'
 import json,sys
 r=json.loads(sys.argv[1]).get('result') or []
 x=r[0] if r else {}
-print(x.get('id',''),x.get('type',''),x.get('content',''),x.get('proxied',False))
+print('|'.join((x.get('id',''),x.get('type',''),x.get('content',''),str(x.get('proxied',False)).lower())))
 PY
 )
-EOF
+  IFS='|' read -r rid rtype rcontent rproxy <<< "$parsed"
   if [[ -n "$rid" ]]; then
-    [[ "$rtype" == "$type" && "$rcontent" == "$content" && "$rproxy" == "$proxied" ]] || fail "existing DNS record for $name conflicts with gateway"
-  else
-    body=$(python3 - "$name" "$type" "$content" "$proxied" "$ttl" <<'PY'
+    if [[ "$rtype" == "$type" && "$rcontent" == "$content" && "$rproxy" == "$proxied" ]]; then
+      return 0
+    fi
+    fail "DNS conflict for $name: expected ${type} ${content} proxied=${proxied}; found ${rtype} ${rcontent} proxied=${rproxy} (id=${rid})"
+  fi
+  body=$(python3 - "$name" "$type" "$content" "$proxied" "$ttl" <<'PY'
 import json,sys
 print(json.dumps({'name':sys.argv[1],'type':sys.argv[2],'content':sys.argv[3],'proxied':sys.argv[4]=='true','ttl':int(sys.argv[5])}))
 PY
 )
-    api POST "$CF_API/zones/$zone_id/dns_records" "$body" >/dev/null || fail "failed to create DNS record: $name"
-  fi
+  api POST "$CF_API/zones/$zone_id/dns_records" "$body" >/dev/null || fail "failed to create DNS record: $name"
 }
 
 ensure_dns "$PUBLIC_HOSTNAME" CNAME "$state_id.cfargotunnel.com" true 1
