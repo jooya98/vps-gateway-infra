@@ -1,93 +1,72 @@
-# Echo multi-protocol gateway
+# Echo comprehensive gateway
 
-This layer is intentionally additive. Pulling the repository does **not** change a live VPS. Do not rerun `bootstrap.sh` or `deploy/deploy.sh` merely to test this feature.
+The repository has one production profile and one public installation entrypoint:
+
+```bash
+sudo bash bootstrap.sh
+```
+
+There are no separate activation commands. Bootstrap collects host-specific values, preserves existing state, and invokes the helper scripts internally.
 
 ## Listener model
 
-Direct transports bind explicitly to IPv4 `0.0.0.0`. This includes SOCKS5 and HTTP proxy; both use the existing gateway credentials. `0.0.0.0` is the deterministic public IPv4 bind, while the Cloudflare-backed application transports remain loopback-only.
-
-| Protocol | Origin/listen | Exposure |
+| Protocol | Listen | Exposure |
 |---|---|---|
 | VLESS + Reality + Vision | `0.0.0.0:8443` | direct IPv4 |
 | Shadowsocks | `0.0.0.0:8444` | direct IPv4 |
 | Shadowsocks 2022 | `0.0.0.0:8445` | direct IPv4 |
+| Hysteria2 | `0.0.0.0:8446` | direct UDP + TLS |
+| TUIC | `0.0.0.0:8447` | direct UDP + TLS |
+| Trojan | `0.0.0.0:8448` | direct TCP + TLS |
+| AnyTLS | `0.0.0.0:8449` | direct TCP + TLS |
+| VLESS + gRPC | `0.0.0.0:8450` | direct TCP + TLS |
 | SOCKS5 | `0.0.0.0:1080` | direct IPv4, authenticated |
 | HTTP proxy | `0.0.0.0:8080` | direct IPv4, authenticated |
 | VLESS + WebSocket | `127.0.0.1:18080` | Cloudflare Tunnel |
 | VMess + WebSocket | `127.0.0.1:18081` | Cloudflare Tunnel |
 | VLESS + HTTPUpgrade | `127.0.0.1:18082` | Cloudflare Tunnel |
-| Hysteria2 | `0.0.0.0:8446` | direct UDP + TLS when enabled |
-| TUIC | `0.0.0.0:8447` | direct UDP + TLS when enabled |
-| Trojan | `0.0.0.0:8448` | direct TCP + TLS when enabled |
-| AnyTLS | `0.0.0.0:8449` | direct TCP + TLS when enabled |
-| VLESS + gRPC | `0.0.0.0:8450` | direct TCP + TLS when enabled |
 
-The optional TLS/QUIC family remains disabled until a trusted certificate/key pair is available. Set `ENABLE_DIRECT_TLS=1` with valid `TLS_CERT_PATH` and `TLS_KEY_PATH` before activation.
+## Cloudflare
 
-## Cloudflare Tunnel
+The installation uses a locally-managed Cloudflare Tunnel. The interactive bootstrap collects the API token, account ID, zone, public hostname, direct hostname, and tunnel name, then stores the resulting runtime inputs in the root-only runtime file.
 
-The multiprotocol path uses a **locally-managed** Cloudflare Tunnel. `scripts/activate-cloudflared-local.sh` takes a scoped Cloudflare API token and account ID, creates a local-config tunnel if needed, writes a tunnel-scoped credential file, renders `config.yml`, creates the DNS CNAME, and installs the dedicated systemd unit.
-
-Required provisioning values:
+The public hostname is proxied through Cloudflare:
 
 ```text
-CLOUDFLARE_API_TOKEN=...
-CLOUDFLARE_ACCOUNT_ID=...
+echo.engine.qzz.io
+  /vless-ws  -> 127.0.0.1:18080
+  /vmess-ws  -> 127.0.0.1:18081
+  /vless-hu  -> 127.0.0.1:18082
 ```
 
-The API token is provisioning material only. The long-running connector authenticates with the tunnel-specific credential file. Cloudflare documents locally-managed tunnels as using a local YAML configuration and tunnel credential file; remotely-managed tunnels instead use a run token and dashboard/API configuration. citeturn140830search0turn363662search1
+The direct hostname is deliberately DNS-only:
 
-Ingress:
-
-- `echo.engine.qzz.io` + `/vless-ws` -> `http://127.0.0.1:18080`
-- `echo.engine.qzz.io` + `/vmess-ws` -> `http://127.0.0.1:18081`
-- `echo.engine.qzz.io` + `/vless-hu` -> `http://127.0.0.1:18082`
-- catch-all -> HTTP 404
-
-The config deliberately keeps the three HTTP-origin transports loopback-only. Cloudflare requires a catch-all rule at the end of a local ingress configuration. citeturn140830search0
-
-## Safe activation on an existing VPS
-
-First validate the sing-box layer without changing live state:
-
-```bash
-cd /opt/vps-gateway-infra
-git pull --ff-only
-sudo DRY_RUN=1 bash scripts/activate-multiprotocol.sh
+```text
+direct.echo.engine.qzz.io -> Echo public IPv4
 ```
 
-Then validate the Cloudflare local configuration. This dry-run does not create a tunnel or DNS record:
+That separation is required because the raw TCP/UDP transports are not served through the HTTP Tunnel ingress path.
 
-```bash
-sudo DRY_RUN=1 bash scripts/activate-cloudflared-local.sh
-```
+## TLS
 
-Only after both validations succeed should the live layers be activated.
+Bootstrap creates the direct hostname DNS record before requesting a trusted Let's Encrypt certificate through Cloudflare DNS-01. The certificate covers both public hostnames and is copied to the paths consumed by sing-box.
+
+Certbot keeps the Cloudflare credential file root-only and reuses it for renewal. The Certbot Cloudflare plugin supports restricted API tokens and requires DNS editing access for the managed zone. citeturn320645search12
+
+## State and idempotency
+
+Gateway credentials are generated once. Existing runtime credentials are preserved. Existing Cloudflare Tunnel state is reused when it matches the configured account and tunnel. Existing DNS records are validated; conflicting records fail instead of being silently replaced.
+
+Sing-box configuration is validated before activation and the previous configuration is backed up before replacement.
 
 ## Client bundle
 
-Generate the complete bundle from the **live** sing-box config:
-
-```bash
-sudo bash scripts/generate-multiprotocol-clients.sh
-```
-
-The script detects a normal home user and asks for the destination user when interactive. Use `CLIENT_USER=<user>` for automation. Output is stored as:
+Bootstrap generates the complete bundle under the selected normal user's home directory:
 
 ```text
 /home/<user>/vpn-client/
 ```
 
-Each enabled protocol has its own `.txt` share-link file. Additionally:
+It includes per-protocol files and aggregated import artifacts for v2rayN and other clients.
 
-- `all-import-links.txt` contains every generated import URI, including HTTP proxy.
-- `v2rayn-import.txt` contains standard share URIs for the protocols supported by current v2rayN import flows.
-- `v2rayn-import-base64.txt` contains the same v2rayN entries as one base64 blob for clipboard/subscription-style import.
-
-Current v2rayN documentation lists VMess, Shadowsocks, SOCKS, VLESS, Trojan, Hysteria2, TUIC, WireGuard and AnyTLS among supported subscription/share protocols. citeturn886821search2
-
-The generator reads the live configuration, so ports and server credentials are not duplicated in a second source of truth. It never writes the server's Reality private key or Cloudflare tunnel credentials into the client bundle.
-
-## Firewall
-
-The sing-box activation script deliberately does not modify UFW. Cloudflare-backed WS/HTTPUpgrade origins require no new public origin ports. Public SOCKS/HTTP, Shadowsocks and Reality require their corresponding IPv4 firewall rules. Direct TLS/QUIC ports require explicit TCP/UDP firewall rules before they can be used.
+The generator reads the live sing-box configuration, so the final client parameters come from the active service rather than a second manually maintained configuration source.
