@@ -1,0 +1,112 @@
+{
+  "log": {
+    "level": "${SING_BOX_LOG_LEVEL}",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-reality",
+      "listen": "${REALITY_LISTEN_ADDRESS}",
+      "listen_port": ${REALITY_PORT},
+      "users": [
+        {
+          "name": "personal",
+          "uuid": "${VLESS_UUID}",
+          "flow": "xtls-rprx-vision"
+        }
+      ],
+      "tls": {
+        "enabled": true,
+        "server_name": "${REALITY_SERVER_NAME}",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "${REALITY_HANDSHAKE_SERVER}",
+            "server_port": ${REALITY_HANDSHAKE_PORT}
+          },
+          "private_key": "${REALITY_PRIVATE_KEY}",
+          "short_id": ["${REALITY_SHORT_ID}"]
+        }
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "vless-ws",
+      "listen": "127.0.0.1",
+      "listen_port": ${VLESS_WS_PORT},
+      "users": [
+        {"name": "personal", "uuid": "${VLESS_UUID}"}
+      ],
+      "transport": {
+        "type": "ws",
+        "path": "${VLESS_WS_PATH}"
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "vless-httpupgrade",
+      "listen": "127.0.0.1",
+      "listen_port": ${VLESS_HTTPUPGRADE_PORT},
+      "users": [
+        {"name": "personal", "uuid": "${VLESS_UUID}"}
+      ],
+      "transport": {
+        "type": "httpupgrade",
+        "host": "${PUBLIC_HOSTNAME}",
+        "path": "${VLESS_HTTPUPGRADE_PATH}"
+      }
+    },
+    {
+      "type": "vmess",
+      "tag": "vmess-ws",
+      "listen": "127.0.0.1",
+      "listen_port": ${VMESS_WS_PORT},
+      "users": [
+        {"name": "personal", "uuid": "${VLESS_UUID}", "alterId": 0}
+      ],
+      "transport": {
+        "type": "ws",
+        "path": "${VMESS_WS_PATH}"
+      }
+    },
+    {
+      "type": "shadowsocks",
+      "tag": "shadowsocks",
+      "listen": "${SHADOWSOCKS_LISTEN_ADDRESS}",
+      "listen_port": ${SHADOWSOCKS_PORT},
+      "method": "chacha20-ietf-poly1305",
+      "password": "${SHADOWSOCKS_PASSWORD}"
+    },
+    {
+      "type": "shadowsocks",
+      "tag": "shadowsocks-2022",
+      "listen": "${SHADOWSOCKS_2022_LISTEN_ADDRESS}",
+      "listen_port": ${SHADOWSOCKS_2022_PORT},
+      "method": "2022-blake3-chacha20-poly1305",
+      "password": "${MULTI_SHADOWSOCKS_2022_PASSWORD}",
+      "multiplex": {"enabled": true}
+    },
+    {
+      "type": "socks",
+      "tag": "socks5",
+      "listen": "${SOCKS_LISTEN_ADDRESS}",
+      "listen_port": ${SOCKS_LISTEN_PORT},
+      "users": [
+        {"username": "${SOCKS_USERNAME}", "password": "${SOCKS_PASSWORD}"}
+      ]
+    },
+    {
+      "type": "http",
+      "tag": "http-proxy",
+      "listen": "${HTTP_LISTEN_ADDRESS}",
+      "listen_port": ${HTTP_PORT},
+      "users": [
+        {"username": "${SOCKS_USERNAME}", "password": "${SOCKS_PASSWORD}"}
+      ]
+    }${DIRECT_TLS_INBOUNDS}
+  ],
+  "outbounds": [
+    {"type": "direct", "tag": "direct"}
+  ]
+}
