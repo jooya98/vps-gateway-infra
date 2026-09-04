@@ -57,6 +57,7 @@ if [[ -n "${CERTBOT_EMAIL:-}" ]]; then EMAIL_ARGS=(--email "$CERTBOT_EMAIL"); fi
   -d "$DIRECT_HOSTNAME"
 
 [[ -s "$CERT_DIR/fullchain.pem" && -s "$CERT_DIR/privkey.pem" ]] || fail 'certificate files were not created'
+install -d -m 0755 "$(dirname "$CERT_PATH")" "$(dirname "$KEY_PATH")"
 install -m 0644 "$CERT_DIR/fullchain.pem" "$CERT_PATH"
 install -m 0600 "$CERT_DIR/privkey.pem" "$KEY_PATH"
 
@@ -68,6 +69,7 @@ cat > "$HOOK" <<'EOF'
 set -euo pipefail
 lineage=${RENEWED_LINEAGE:-}
 [[ -n "$lineage" ]] || exit 0
+install -d -m 0755 /etc/sing-box
 install -m 0644 "$lineage/fullchain.pem" /etc/sing-box/server.crt
 install -m 0600 "$lineage/privkey.pem" /etc/sing-box/server.key
 systemctl try-restart sing-box.service >/dev/null 2>&1 || true
