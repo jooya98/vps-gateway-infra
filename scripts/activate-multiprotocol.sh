@@ -118,14 +118,14 @@ items=[
  {'type':'anytls','tag':'anytls','listen':'::','listen_port':int(os.environ['ANYTLS_PORT']),'users':[{'name':'personal','password':os.environ['MULTI_ANYTLS_PASSWORD']}],'tls':tls()},
  {'type':'vless','tag':'vless-grpc','listen':'::','listen_port':int(os.environ['VLESS_GRPC_PORT']),'users':[{'name':'personal','uuid':os.environ['VLESS_UUID']}],'tls':tls(['h2']),'transport':{'type':'grpc','service_name':'EchoService'}},
 ]
-print(','+json.dumps(items,separators=(',',':'))[1:])
+encoded=json.dumps(items,separators=(',',':'))
+print(','+encoded[1:-1])
 PY
 )
 fi
 
 export DIRECT_TLS_INBOUNDS
 rendered=$(mktemp /etc/sing-box/.multiprotocol.XXXXXX)
-backup=""
 cleanup(){ rm -f "$rendered"; }
 trap cleanup EXIT
 
