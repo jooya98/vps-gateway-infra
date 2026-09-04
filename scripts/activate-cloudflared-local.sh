@@ -17,6 +17,7 @@ DRY_RUN=${DRY_RUN:-0}
 [[ $EUID -eq 0 ]] || fail 'root is required'
 command -v curl >/dev/null 2>&1 || fail 'curl is required'
 command -v python3 >/dev/null 2>&1 || fail 'python3 is required'
+command -v openssl >/dev/null 2>&1 || fail 'openssl is required'
 [[ -x "${CLOUDFLARED_BIN:-/usr/local/bin/cloudflared}" ]] || fail 'cloudflared not found'
 [[ -f "$RUNTIME_FILE" && -f "$PROFILE_FILE" ]] || fail 'runtime/profile file missing'
 [[ -f "$TEMPLATE" && -f "$SERVICE_TEMPLATE" ]] || fail 'Cloudflare templates missing'
@@ -25,18 +26,18 @@ set -a
 source "$RUNTIME_FILE"
 source "$PROFILE_FILE"
 set +a
-CF_API_TOKEN=${CLOUDFLARE_API_TOKEN:-${CLOUDFLARE_API_TOKEN_FILE:-}}
 [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || fail 'CLOUDFLARE_API_TOKEN is required for local-managed provisioning'
 [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || fail 'CLOUDFLARE_ACCOUNT_ID is required'
 [[ -n "${CLOUDFLARE_ZONE_NAME:-}" ]] || fail 'CLOUDFLARE_ZONE_NAME is required'
 [[ -n "${PUBLIC_HOSTNAME:-}" ]] || fail 'PUBLIC_HOSTNAME is required'
 
-state_id=''; state_secret=''; state_account=''
+state_id=''; state_secret=''; state_account=''; tunnel_name="${CLOUDFLARE_TUNNEL_NAME:-echo-gateway}"
 if [[ -f "$STATE_FILE" ]]; then
   set -a; source "$STATE_FILE"; set +a
   state_id=${CLOUDFLARE_TUNNEL_ID:-}
   state_secret=${CLOUDFLARE_TUNNEL_SECRET:-}
   state_account=${CLOUDFLARE_TUNNEL_ACCOUNT_TAG:-}
+  tunnel_name=${CLOUDFLARE_TUNNEL_NAME:-$tunnel_name}
 fi
 
 api(){
@@ -48,9 +49,20 @@ api(){
   fi
 }
 
-if [[ -n "$state_id" && -n "$state_secret" ]]; then
-  info=$(api GET "$CF_API/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/$state_id") || fail 'stored tunnel cannot be read'
-  read -r config_src account_tag tunnel_name <<EOF
+if [[ "$DRY_RUN" == 1 ]]; then
+  # Do not create/modify Cloudflare resources during dry-run. A stored local
+  # tunnel may be inspected; otherwise use a syntactically valid placeholder
+  # UUID and validate only the generated local config/service.
+  if [[ -z "$state_id" ]]; then
+    state_id=00000000-0000-4000-8000-000000000000
+    state_account="${CLOUDFLARE_ACCOUNT_ID}"
+  fi
+  state_secret=${state_secret:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+  account_tag=${state_account:-$CLOUDFLARE_ACCOUNT_ID}
+else
+  if [[ -n "$state_id" && -n "$state_secret" ]]; then
+    info=$(api GET "$CF_API/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/$state_id") || fail 'stored tunnel cannot be read'
+    read -r config_src account_tag cloud_name <<EOF
 $(python3 - <<'PY' "$info"
 import json,sys
 r=json.loads(sys.argv[1]).get('result') or {}
@@ -58,17 +70,18 @@ print(r.get('config_src',''), r.get('account_tag',''), r.get('name',''))
 PY
 )
 EOF
-  [[ "$config_src" == local ]] || fail "stored tunnel is not locally managed (config_src=$config_src)"
-  [[ -z "$state_account" || "$state_account" == "$account_tag" ]] || fail 'stored tunnel account tag mismatch'
-else
-  secret=$(openssl rand -base64 32 | tr -d '\n')
-  body=$(python3 - <<'PY'
+    [[ "$config_src" == local ]] || fail "stored tunnel is not locally managed (config_src=$config_src)"
+    [[ -z "$state_account" || "$state_account" == "$account_tag" ]] || fail 'stored tunnel account tag mismatch'
+    [[ -z "$cloud_name" || "$cloud_name" == "$tunnel_name" ]] || tunnel_name=$cloud_name
+  else
+    state_secret=$(openssl rand -base64 32 | tr -d '\n')
+    body=$(TUNNEL_SECRET="$state_secret" TUNNEL_NAME="$tunnel_name" python3 - <<'PY'
 import json,os
-print(json.dumps({'name':os.environ['CLOUDFLARE_TUNNEL_NAME'],'config_src':'local','tunnel_secret':os.environ['TUNNEL_SECRET']}))
+print(json.dumps({'name':os.environ['TUNNEL_NAME'],'config_src':'local','tunnel_secret':os.environ['TUNNEL_SECRET']}))
 PY
-  )
-  response=$(TUNNEL_SECRET="$secret" api POST "$CF_API/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel" "$body") || fail 'failed to create locally-managed tunnel'
-  read -r state_id account_tag tunnel_name <<EOF
+    )
+    response=$(api POST "$CF_API/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel" "$body") || fail 'failed to create locally-managed tunnel'
+    read -r state_id account_tag cloud_name <<EOF
 $(python3 - <<'PY' "$response"
 import json,sys
 r=json.loads(sys.argv[1]).get('result') or {}
@@ -76,30 +89,27 @@ print(r.get('id',''), r.get('account_tag',''), r.get('name',''))
 PY
 )
 EOF
-  [[ -n "$state_id" && -n "$account_tag" ]] || fail 'Cloudflare did not return tunnel identity'
-  install -d -m 0700 "$(dirname "$STATE_FILE")"
-  umask 077
-  cat > "$STATE_FILE" <<EOF
+    [[ -n "$state_id" && -n "$account_tag" ]] || fail 'Cloudflare did not return tunnel identity'
+    tunnel_name=${cloud_name:-$tunnel_name}
+    install -d -m 0700 "$(dirname "$STATE_FILE")"
+    umask 077
+    cat > "$STATE_FILE" <<EOF
 # Local-managed Cloudflare tunnel state. Mode 0600.
 CLOUDFLARE_TUNNEL_ID=$state_id
 CLOUDFLARE_TUNNEL_ACCOUNT_TAG=$account_tag
 CLOUDFLARE_TUNNEL_NAME=$tunnel_name
-CLOUDFLARE_TUNNEL_SECRET=$secret
+CLOUDFLARE_TUNNEL_SECRET=$state_secret
 EOF
-  chmod 0600 "$STATE_FILE"
-  state_secret=$secret
+    chmod 0600 "$STATE_FILE"
+  fi
 fi
 
-# A local-managed credential file contains only tunnel-scoped credentials.
-install -d -m 0755 /etc/cloudflared
-cat > "$CREDENTIALS_PATH.tmp" <<EOF
-{"AccountTag":"$account_tag","TunnelSecret":"$state_secret","TunnelID":"$state_id"}
-EOF
-chmod 0600 "$CREDENTIALS_PATH.tmp"
-mv "$CREDENTIALS_PATH.tmp" "$CREDENTIALS_PATH"
-
 export CLOUDFLARED_TUNNEL_ID=$state_id
-export CLOUDFLARE_TUNNEL_ACCOUNT_TAG=$account_tag
+export CLOUDFLARED_CREDENTIALS_PATH=$CREDENTIALS_PATH
+export CLOUDFLARED_CONFIG_PATH=$CONFIG_PATH
+export CLOUDFLARE_TUNNEL_ACCOUNT_TAG=${account_tag:-$state_account}
+export CLOUDFLARE_TUNNEL_NAME=$tunnel_name
+
 render(){
   python3 - "$1" "$2" <<'PY'
 import os,re,sys
@@ -116,23 +126,30 @@ open(dst,'w').write(text)
 PY
 }
 
+install -d -m 0755 "$(dirname "$CONFIG_PATH")" "$(dirname "$SERVICE_PATH")"
+if [[ "$DRY_RUN" == 0 ]]; then
+  cat > "$CREDENTIALS_PATH.tmp" <<EOF
+{"AccountTag":"$account_tag","TunnelSecret":"$state_secret","TunnelID":"$state_id"}
+EOF
+  chmod 0600 "$CREDENTIALS_PATH.tmp"
+  mv "$CREDENTIALS_PATH.tmp" "$CREDENTIALS_PATH"
+fi
+
 render "$TEMPLATE" "$CONFIG_PATH.tmp"
 render "$SERVICE_TEMPLATE" "$SERVICE_PATH.tmp"
 "${CLOUDFLARED_BIN:-/usr/local/bin/cloudflared}" --config "$CONFIG_PATH.tmp" tunnel ingress validate
 
-# Resolve the zone containing the public hostname.
-zone_json=$(api GET "$CF_API/zones?name=$CLOUDFLARE_ZONE_NAME&status=active") || fail 'failed to query Cloudflare zone'
-zone_id=$(python3 - <<'PY' "$zone_json"
+if [[ "$DRY_RUN" == 0 ]]; then
+  zone_json=$(api GET "$CF_API/zones?name=$CLOUDFLARE_ZONE_NAME&status=active") || fail 'failed to query Cloudflare zone'
+  zone_id=$(python3 - <<'PY' "$zone_json"
 import json,sys
 r=json.loads(sys.argv[1]).get('result') or []
 print(r[0].get('id','') if r else '')
 PY
-)
-[[ -n "$zone_id" ]] || fail 'zone was not found or token lacks zone access'
-
-# The hostname must resolve to this tunnel. Refuse to clobber an unrelated record.
-records=$(api GET "$CF_API/zones/$zone_id/dns_records?name=$PUBLIC_HOSTNAME") || fail 'failed to inspect DNS record'
-read -r record_id record_type record_content <<EOF
+  )
+  [[ -n "$zone_id" ]] || fail 'zone was not found or token lacks zone access'
+  records=$(api GET "$CF_API/zones/$zone_id/dns_records?name=$PUBLIC_HOSTNAME") || fail 'failed to inspect DNS record'
+  read -r record_id record_type record_content <<EOF
 $(python3 - <<'PY' "$records"
 import json,sys
 r=json.loads(sys.argv[1]).get('result') or []
@@ -142,30 +159,27 @@ else:
 PY
 )
 EOF
-expected="$state_id.cfargotunnel.com"
-dns_body=$(python3 - <<'PY'
+  expected="$state_id.cfargotunnel.com"
+  if [[ -n "$record_id" ]]; then
+    [[ "$record_type" == CNAME && "$record_content" == "$expected" ]] || fail "existing DNS record for $PUBLIC_HOSTNAME is not the expected tunnel CNAME"
+  else
+    EXPECTED="$expected" python3 - <<'PY' > "$CONFIG_PATH.dns.json"
 import json,os
 print(json.dumps({'type':'CNAME','name':os.environ['PUBLIC_HOSTNAME'],'content':os.environ['EXPECTED'],'ttl':1,'proxied':True}))
 PY
-)
-if [[ -n "$record_id" ]]; then
-  [[ "$record_type" == CNAME && "$record_content" == "$expected" ]] || fail "existing DNS record for $PUBLIC_HOSTNAME is not the expected tunnel CNAME"
-else
-  EXPECTED="$expected" api POST "$CF_API/zones/$zone_id/dns_records" "$dns_body" >/dev/null
-fi
+    dns_body=$(cat "$CONFIG_PATH.dns.json"); rm -f "$CONFIG_PATH.dns.json"
+    api POST "$CF_API/zones/$zone_id/dns_records" "$dns_body" >/dev/null || fail 'failed to create DNS CNAME'
+  fi
 
-mkdir -p "$(dirname "$CONFIG_PATH")" "$(dirname "$SERVICE_PATH")"
-chmod 0600 "$CONFIG_PATH.tmp"; chmod 0644 "$SERVICE_PATH.tmp"
-if [[ "$DRY_RUN" == 1 ]]; then
+  chmod 0600 "$CONFIG_PATH.tmp"; chmod 0644 "$SERVICE_PATH.tmp"
+  install -m 0600 "$CONFIG_PATH.tmp" "$CONFIG_PATH"
+  install -m 0644 "$SERVICE_PATH.tmp" "$SERVICE_PATH"
   rm -f "$CONFIG_PATH.tmp" "$SERVICE_PATH.tmp"
-  printf 'cloudflared-local: validation succeeded; live tunnel service unchanged\n'
-  exit 0
+  systemctl daemon-reload
+  systemctl enable --now cloudflared-echo.service
+  systemctl --quiet is-active cloudflared-echo.service || fail 'cloudflared service did not become active'
+  printf 'cloudflared-local: local-managed tunnel active (%s)\n' "$state_id"
+else
+  rm -f "$CONFIG_PATH.tmp" "$SERVICE_PATH.tmp"
+  printf 'cloudflared-local: dry-run validation succeeded; Cloudflare and local service state unchanged\n'
 fi
-
-install -m 0600 "$CONFIG_PATH.tmp" "$CONFIG_PATH"
-install -m 0644 "$SERVICE_PATH.tmp" "$SERVICE_PATH"
-rm -f "$CONFIG_PATH.tmp" "$SERVICE_PATH.tmp"
-systemctl daemon-reload
-systemctl enable --now cloudflared-echo.service
-systemctl --quiet is-active cloudflared-echo.service || fail 'cloudflared service did not become active'
-printf 'cloudflared-local: local-managed tunnel active (%s)\n' "$state_id"
