@@ -1,0 +1,14 @@
+[Unit]
+Description=Cloudflare Tunnel for Echo multiprotocol gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+TimeoutStartSec=15
+ExecStart=${CLOUDFLARED_BIN} --config ${CLOUDFLARED_CONFIG_PATH} tunnel run ${CLOUDFLARED_TUNNEL_ID}
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
