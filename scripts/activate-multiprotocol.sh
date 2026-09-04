@@ -5,7 +5,7 @@ set -euo pipefail
 # Unlike bootstrap/deploy, this script does not install packages, change SSH,
 # change UFW, or touch the Cloudflare Tunnel service. It only validates and
 # atomically swaps the sing-box configuration, preserving the existing
-# Reality/legacy-Shadowsocks/SOCKS listeners where possible.
+# Reality/legacy-Shadowsocks/SOCKS listeners and credentials where possible.
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 RUNTIME_FILE=${RUNTIME_FILE:-/root/vps-gateway-runtime.conf}
@@ -34,7 +34,9 @@ if [[ -f "$MULTI_RUNTIME_FILE" ]]; then
 fi
 set +a
 
-# Preserve the live listener choices from the currently deployed config.
+# Preserve the live listener choices and credentials from the currently deployed config.
+# This is important because the runtime file is the bootstrap credential store,
+# while the live config is the final source of truth for what is actually active.
 eval "$(python3 - "$CONFIG_FILE" <<'PY'
 import json, shlex, sys
 p=sys.argv[1]
@@ -52,14 +54,28 @@ if not r:
             r=x; break
 ss=find('shadowsocks-in') or find('shadowsocks')
 socks=find('socks-in') or find('socks-out') or find('socks5')
-for k,v in {
+
+def first_user(x):
+    return ((x or {}).get('users') or [{}])[0]
+ru=first_user(r); ssu=first_user(ss); su=first_user(socks)
+vals={
     'REALITY_LISTEN_ADDRESS': (r or {}).get('listen','::'),
     'REALITY_PORT': (r or {}).get('listen_port',8443),
+    'REALITY_SERVER_NAME': (r or {}).get('tls',{}).get('server_name','www.cloudflare.com'),
+    'REALITY_HANDSHAKE_SERVER': (r or {}).get('tls',{}).get('reality',{}).get('handshake',{}).get('server','www.cloudflare.com'),
+    'REALITY_HANDSHAKE_PORT': (r or {}).get('tls',{}).get('reality',{}).get('handshake',{}).get('server_port',443),
+    'REALITY_PRIVATE_KEY': (r or {}).get('tls',{}).get('reality',{}).get('private_key',''),
+    'REALITY_SHORT_ID': ((r or {}).get('tls',{}).get('reality',{}).get('short_id') or [''])[0],
+    'VLESS_UUID': ru.get('uuid',''),
     'SHADOWSOCKS_LISTEN_ADDRESS': (ss or {}).get('listen','::'),
     'SHADOWSOCKS_PORT': (ss or {}).get('listen_port',8444),
+    'SHADOWSOCKS_PASSWORD': (ss or {}).get('password','') or ssu.get('password',''),
     'SOCKS_LISTEN_ADDRESS': (socks or {}).get('listen','127.0.0.1'),
     'SOCKS_LISTEN_PORT': (socks or {}).get('listen_port',1080),
-}.items():
+    'SOCKS_USERNAME': su.get('username',''),
+    'SOCKS_PASSWORD': su.get('password',''),
+}
+for k,v in vals.items():
     print(f'{k}={shlex.quote(str(v))}')
 PY
 )"
@@ -95,7 +111,7 @@ fi
 
 required=(VLESS_UUID REALITY_PRIVATE_KEY REALITY_SHORT_ID SOCKS_USERNAME SOCKS_PASSWORD SHADOWSOCKS_PASSWORD MULTI_SHADOWSOCKS_2022_PASSWORD)
 for name in "${required[@]}"; do
-  [[ -n "${!name:-}" ]] || { printf 'activate: missing runtime value: %s\n' "$name" >&2; exit 1; }
+  [[ -n "${!name:-}" ]] || { printf 'activate: missing live runtime value: %s\n' "$name" >&2; exit 1; }
 done
 
 DIRECT_TLS_INBOUNDS=''
