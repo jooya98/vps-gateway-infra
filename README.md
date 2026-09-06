@@ -12,7 +12,7 @@ cd /opt/vps-gateway-infra
 sudo bash bootstrap.sh
 ```
 
-`bootstrap.sh` is the only public installation entrypoint. It collects host-specific values interactively, preserves existing credentials when present, installs required software, configures the gateway-owned SSH/UFW policy, provisions the local-managed Cloudflare Tunnel, creates DNS records, obtains the Let's Encrypt certificate through Cloudflare DNS-01, activates the complete sing-box multi-protocol configuration, and generates the client bundle.
+`bootstrap.sh` is the only public installation entrypoint. It collects host-specific values interactively, preserves existing credentials when present, installs required software, configures the gateway-owned SSH/UFW policy, provisions the local-managed Cloudflare Tunnel, creates DNS records, obtains the Let's Encrypt certificate through Cloudflare DNS-01, activates the complete sing-box multi-protocol configuration, generates the client bundle, and runs a final read-only self-audit.
 
 No `export`, separate activation command, profile selection, or manual certificate installation is required.
 
@@ -35,6 +35,18 @@ Fresh installations prompt for the values that are genuinely host/account specif
 The gateway owns the OpenSSH server configuration. Provider-generated `sshd_config.d` fragments are removed from the active configuration and preserved only in a root-controlled backup area for forensics. SSH is standardized on TCP/22, root login is disabled, and password authentication is disabled only after the admin public key has been installed and the SSH policy has been validated.
 
 Generated credentials and operational state stay outside Git under root-owned files.
+
+## Final self-audit
+
+After deployment, `bootstrap.sh` automatically runs:
+
+```bash
+./scripts/self-audit.sh
+```
+
+The audit is read-only. It checks the effective SSH policy, admin account and SSH key ownership/permissions, sudoers permissions, UFW state and expected ingress rules, public and loopback listeners, sing-box and Cloudflare Tunnel service health, native configuration validation, TLS material, Cloudflare state/credential permissions, and DNS resolution of the configured hostnames. It exits non-zero when a required check fails.
+
+One non-blocking security advisory is currently expected: the sing-box systemd unit does not yet declare a dedicated `User=` and therefore runs as root. This is reported as a warning rather than a deployment failure because changing it safely requires coordinated ownership of TLS private keys and other runtime files.
 
 ## Network model
 
