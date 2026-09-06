@@ -35,7 +35,9 @@ if [[ ! -f "$RUNTIME_FILE" ]]; then
 else
   if ! grep -q '^TRANSPORT_PASSWORD=' "$RUNTIME_FILE"; then runtime_set_value TRANSPORT_PASSWORD "$(openssl rand -hex 24)" "$RUNTIME_FILE"; fi
 fi
-SSH_CURRENT_PORT=$(sshd -T 2>/dev/null | awk '$1=="port"{print $2;exit}' || true); SSH_PORT=${SSH_CURRENT_PORT:-${SSH_PORT:-22}}; runtime_set_value SSH_PORT "$SSH_PORT" "$RUNTIME_FILE"
+# Gateway owns the SSH endpoint; never inherit a provider-selected port.
+SSH_PORT=22
+runtime_set_value SSH_PORT "$SSH_PORT" "$RUNTIME_FILE"
 for spec in 'ADMIN_USER|Admin username|juya' 'CLOUDFLARE_API_TOKEN|Cloudflare API token|' 'CLOUDFLARE_ACCOUNT_ID|Cloudflare account ID|' 'CLOUDFLARE_ZONE_NAME|Cloudflare zone|engine.qzz.io' 'PUBLIC_HOSTNAME|Tunnel public hostname|echo.engine.qzz.io' 'DIRECT_HOSTNAME|Direct TLS hostname|direct.echo.engine.qzz.io' 'CLOUDFLARE_TUNNEL_NAME|Cloudflare Tunnel name|echo-gateway'; do
  IFS='|' read -r name label default <<< "$spec"; current=$(awk -F= -v n="$name" '$1==n{$1="";sub(/^=/,"");print;exit}' "$RUNTIME_FILE" 2>/dev/null || true); [[ -n "$current" ]] && continue; [[ "$TEST_MODE" == 1 ]] && continue; [[ "$name" == CLOUDFLARE_API_TOKEN ]] && prompt_secret "$name" "$label" '' || prompt_value "$name" "$label" "$default"; runtime_set_value "$name" "${!name}" "$RUNTIME_FILE"
 done
