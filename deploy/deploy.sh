@@ -31,13 +31,15 @@ fi
 [[ -x "$SING_BOX_BIN" ]] || bash "$ROOT/scripts/install-sing-box.sh"
 if [[ "$DRY_RUN" == 0 ]]; then
   ADMIN_USER=${ADMIN_USER:?bootstrap must provide ADMIN_USER}
-  ADMIN_USER="$ADMIN_USER" bash "$ROOT/scripts/create-admin-user.sh"
+  ADMIN_KEY=${ADMIN_KEY:-}
+  ADMIN_USER="$ADMIN_USER" ADMIN_KEY="$ADMIN_KEY" bash "$ROOT/scripts/create-admin-user.sh"
+  # Open the canonical SSH port before applying the deny-password SSH policy.
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/apply-firewall.sh"
   bash "$ROOT/scripts/install-ssh-hardening.sh"
   [[ -x "$CLOUDFLARED_BIN" ]] || bash "$ROOT/scripts/install-cloudflared.sh"
   PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/provision-cloudflare.sh"
   PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/ensure-tls-certificate.sh"
   PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/activate-multiprotocol.sh"
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/apply-firewall.sh"
   PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/generate-multiprotocol-clients.sh"
   systemctl --no-pager --quiet is-active sing-box.service
   systemctl --no-pager --quiet is-active cloudflared-echo.service
