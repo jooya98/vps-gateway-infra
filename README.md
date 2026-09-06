@@ -41,7 +41,7 @@ Generated credentials and operational state stay outside Git under root-owned fi
 After deployment, `bootstrap.sh` automatically runs:
 
 ```bash
-./scripts/self-audit.sh
+sudo bash ./scripts/self-audit.sh
 ```
 
 The audit is read-only. It checks the effective SSH policy, admin account and SSH key ownership/permissions, sudoers permissions, UFW state and expected ingress rules, public and loopback listeners, sing-box and Cloudflare Tunnel service health, native configuration validation, TLS material, Cloudflare state/credential permissions, and DNS resolution of the configured hostnames. It exits non-zero when a required check fails.
