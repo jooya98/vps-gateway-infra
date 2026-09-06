@@ -40,16 +40,8 @@ SSH_DIR="$USER_HOME/.ssh"
 AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
 install -d -m 0700 -o "$ADMIN_USER" -g "$ADMIN_USER" "$SSH_DIR"
 
-if [[ -z "$ADMIN_KEY" && ! -s "$AUTHORIZED_KEYS" ]]; then
-  if [[ -f /root/.ssh/authorized_keys && -s /root/.ssh/authorized_keys ]]; then
-    printf 'SSH public key for %s (Enter to copy root authorized keys): ' "$ADMIN_USER"
-    read -r ADMIN_KEY
-    if [[ -z "$ADMIN_KEY" ]]; then
-      cat /root/.ssh/authorized_keys >> "$AUTHORIZED_KEYS"
-    fi
-  fi
-fi
-
+# A fresh or keyless admin account must receive an explicit public key before
+# SSH password authentication can be disabled by the hardening step.
 if [[ -z "$ADMIN_KEY" && ! -s "$AUTHORIZED_KEYS" ]]; then
   while true; do
     read -r -p "SSH public key for $ADMIN_USER: " ADMIN_KEY
