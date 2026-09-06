@@ -1,10 +1,10 @@
 # VPS Gateway Infrastructure
 
-Reproducible, security-focused Debian gateway provisioning for a single comprehensive gateway profile.
+Reproducible, security-focused gateway provisioning for a single comprehensive gateway profile.
 
 ## Install
 
-On a fresh Debian VPS:
+On a fresh Debian/Ubuntu VPS:
 
 ```bash
 git clone https://github.com/jooya98/vps-gateway-infra.git /opt/vps-gateway-infra
@@ -12,7 +12,7 @@ cd /opt/vps-gateway-infra
 sudo bash bootstrap.sh
 ```
 
-`bootstrap.sh` is the only public installation entrypoint. It collects host-specific values interactively, preserves existing credentials when present, installs required software, configures SSH/UFW, provisions the local-managed Cloudflare Tunnel, creates DNS records, obtains the Let's Encrypt certificate through Cloudflare DNS-01, activates the complete sing-box multi-protocol configuration, and generates the client bundle.
+`bootstrap.sh` is the only public installation entrypoint. It collects host-specific values interactively, preserves existing credentials when present, installs required software, configures the gateway-owned SSH/UFW policy, provisions the local-managed Cloudflare Tunnel, creates DNS records, obtains the Let's Encrypt certificate through Cloudflare DNS-01, activates the complete sing-box multi-protocol configuration, and generates the client bundle.
 
 No `export`, separate activation command, profile selection, or manual certificate installation is required.
 
@@ -21,6 +21,9 @@ No `export`, separate activation command, profile selection, or manual certifica
 Fresh installations prompt for the values that are genuinely host/account specific:
 
 - SOCKS/HTTP username
+- Admin username
+- Initial admin password
+- Admin SSH public key
 - Cloudflare API token
 - Cloudflare account ID
 - Cloudflare zone
@@ -28,6 +31,8 @@ Fresh installations prompt for the values that are genuinely host/account specif
 - Direct TLS hostname
 - Cloudflare Tunnel name
 - Let's Encrypt email
+
+The gateway owns the OpenSSH server configuration. Provider-generated `sshd_config.d` fragments are removed from the active configuration and preserved only in a root-controlled backup area for forensics. SSH is standardized on TCP/22, root login is disabled, and password authentication is disabled only after the admin public key has been installed and the SSH policy has been validated.
 
 Generated credentials and operational state stay outside Git under root-owned files.
 
@@ -42,9 +47,9 @@ Generated credentials and operational state stay outside Git under root-owned fi
                      /       |       \
               VLESS-WS   VMess-WS   HTTPUpgrade
                               |
-                            Echo
+                            Gateway
 
- direct.echo.engine.qzz.io  ---- DNS-only A ----> Echo
+ direct.echo.engine.qzz.io  ---- DNS-only A ----> Gateway
                               |
                  TLS / QUIC direct transports
 ```
@@ -77,9 +82,9 @@ Managed sing-box configuration changes are backed up before activation and autom
 
 ## Development
 
-All development happens on `feat/resilient-gateway`. `master` is reserved for the production release state.
+`master` is the production baseline. Development changes are made on dedicated branches and merged into `master` only after validation.
 
-Repository tests live under `tests/`. The intended validation path is:
+Repository tests live under `tests/`. The intended validation path includes:
 
 ```bash
 ./scripts/validate-repository.sh
