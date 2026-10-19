@@ -31,8 +31,9 @@ systemctl enable --now tailscaled
 if command -v ufw >/dev/null 2>&1; then
   ufw route allow in on tailscale0 out on "$WAN_IF" >/dev/null
 fi
-if tailscale status >/dev/null 2>&1; then
-  tailscale set --advertise-exit-node=true
+if tailscale status --json 2>/dev/null | grep -Eq '"BackendState"[[:space:]]*:[[:space:]]*"Running"'; then
+  tailscale set --advertise-exit-node
+  tailscale up
 else
   tailscale up --advertise-exit-node
 fi
