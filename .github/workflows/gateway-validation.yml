@@ -15,9 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate repository shell syntax and secret hygiene
         run: ./scripts/validate-repository.sh
-      - name: Test SSH, firewall and optional exit-node policy
-        run: ./tests/test-security-policy.sh
       - name: Install pinned sing-box for config acceptance
         run: SING_BOX_VERSION=1.13.18 ./scripts/install-sing-box.sh
-      - name: Render and validate the current gateway profile
-        run: ./tests/test-gateway-profile.sh
+      - name: Run supported local validation suite
+        run: ./tests/test-local.sh
