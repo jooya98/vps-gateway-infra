@@ -1,9 +1,17 @@
-# Managed by vps-gateway-infra. Do not edit on the host.
-# The bootstrap phase detects the effective SSH listener and supplies SSH_PORT.
-# Keep the listener unchanged while tightening authentication to avoid lockout.
-Port ${SSH_PORT}
+# Managed by vps-gateway-infra; standardized node SSH policy.
+Port 22
 PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
 PermitEmptyPasswords no
+UsePAM yes
+AuthorizedKeysFile .ssh/authorized_keys
+X11Forwarding no
+AllowTcpForwarding no
+GatewayPorts no
+PermitTunnel no
+MaxAuthTries 3
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2

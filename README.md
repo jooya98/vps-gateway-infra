@@ -48,7 +48,11 @@ The audit is read-only. It checks the effective SSH policy, admin account and SS
 
 One non-blocking security advisory is currently expected: the sing-box systemd unit does not yet declare a dedicated `User=` and therefore runs as root. This is reported as a warning rather than a deployment failure because changing it safely requires coordinated ownership of TLS private keys and other runtime files.
 
-## Independent network capabilities\n\nTailscale exit-node mode is optional and separate from the sing-box gateway. Configure it with `scripts/configure-tailscale-exit-node.sh`; this advertises the VPS as an exit node for clients that explicitly select it. It does not route sing-box outbound traffic through Tailscale. See `docs/tailscale-exit-node.md`. DNS/SNI steering is not in the default install path and remains optional pending end-to-end validation.\n\n## Network model
+## Independent network capabilities
+
+Tailscale exit-node mode is optional and separate from the sing-box gateway. Configure it with `scripts/configure-tailscale-exit-node.sh`; this advertises the VPS as an exit node for clients that explicitly select it. It does not route sing-box outbound traffic through Tailscale. See `docs/tailscale-exit-node.md`. DNS/SNI steering is not in the default install path and remains optional pending end-to-end validation.
+
+## Network model
 
 ```text
                          Cloudflare

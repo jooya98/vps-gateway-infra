@@ -63,6 +63,7 @@ if [[ -n "${ADMIN_USER:-}" ]] && id "$ADMIN_USER" >/dev/null 2>&1; then
   ok "admin user exists: $ADMIN_USER"
   ADMIN_UID=$(id -u "$ADMIN_USER")
   HOME_DIR=$(getent passwd "$ADMIN_USER" | cut -d: -f6)
+  ADMIN_GROUP=$(id -gn "$ADMIN_USER")
   [[ -n "$HOME_DIR" && -d "$HOME_DIR" ]] && ok 'admin home directory exists' || bad 'admin home directory is missing'
   [[ "$ADMIN_UID" != 0 ]] && ok 'admin user is non-root' || bad 'admin user unexpectedly has UID 0'
   id -nG "$ADMIN_USER" | tr ' ' '\n' | grep -Fxq sudo && ok 'admin user belongs to sudo group' || bad 'admin user is not in sudo group'
@@ -71,12 +72,12 @@ if [[ -n "${ADMIN_USER:-}" ]] && id "$ADMIN_USER" >/dev/null 2>&1; then
   [[ -d "$SSH_DIR" ]] && ok 'admin .ssh directory exists' || bad 'admin .ssh directory is missing'
   if [[ -d "$SSH_DIR" ]]; then
     mode_is 700 "$SSH_DIR" && ok 'admin .ssh mode is 0700' || bad 'admin .ssh mode is not 0700'
-    owned_by "$ADMIN_USER" "$ADMIN_USER" "$SSH_DIR" && ok 'admin .ssh owner is correct' || bad 'admin .ssh owner is incorrect'
+    owned_by "$ADMIN_USER" "$ADMIN_GROUP" "$SSH_DIR" && ok 'admin .ssh owner is correct' || bad 'admin .ssh owner is incorrect'
   fi
   [[ -s "$AUTHORIZED_KEYS" ]] && ok 'authorized_keys exists and is non-empty' || bad 'authorized_keys is missing or empty'
   if [[ -e "$AUTHORIZED_KEYS" ]]; then
     mode_is 600 "$AUTHORIZED_KEYS" && ok 'authorized_keys mode is 0600' || bad 'authorized_keys mode is not 0600'
-    owned_by "$ADMIN_USER" "$ADMIN_USER" "$AUTHORIZED_KEYS" && ok 'authorized_keys owner is correct' || bad 'authorized_keys owner is incorrect'
+    owned_by "$ADMIN_USER" "$ADMIN_GROUP" "$AUTHORIZED_KEYS" && ok 'authorized_keys owner is correct' || bad 'authorized_keys owner is incorrect'
     ssh-keygen -lf "$AUTHORIZED_KEYS" >/dev/null 2>&1 && ok 'authorized_keys contains parseable SSH public key material' || bad 'authorized_keys is not parseable by ssh-keygen'
   fi
   SUDOERS_FILE="/etc/sudoers.d/$ADMIN_USER"

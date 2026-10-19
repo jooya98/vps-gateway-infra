@@ -17,6 +17,7 @@ if [[ -z "$ADMIN_USER" ]]; then
 fi
 
 ADMIN_KEY=${ADMIN_KEY:-}
+[[ "$ADMIN_USER" =~ ^[a-z][a-z0-9_-]*$ ]] || { printf 'admin: invalid username\n' >&2; exit 1; }
 if ! id "$ADMIN_USER" >/dev/null 2>&1; then
   while true; do
     read -r -s -p "Initial password for $ADMIN_USER: " PASS1; printf '\n'
@@ -34,11 +35,12 @@ if [[ -z "$USER_HOME" ]]; then
   USER_HOME=$(getent passwd "$ADMIN_USER" | cut -d: -f6)
 fi
 
+ADMIN_GROUP=$(id -gn "$ADMIN_USER")
 usermod -aG sudo "$ADMIN_USER"
 [[ -n "$USER_HOME" && -d "$USER_HOME" ]] || { printf 'admin: home directory not found for %s\n' "$ADMIN_USER" >&2; exit 1; }
 SSH_DIR="$USER_HOME/.ssh"
 AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
-install -d -m 0700 -o "$ADMIN_USER" -g "$ADMIN_USER" "$SSH_DIR"
+install -d -m 0700 -o "$ADMIN_USER" -g "$ADMIN_GROUP" "$SSH_DIR"
 
 # A fresh or keyless admin account must receive an explicit public key before
 # SSH password authentication can be disabled by the hardening step.
@@ -51,6 +53,7 @@ if [[ -z "$ADMIN_KEY" && ! -s "$AUTHORIZED_KEYS" ]]; then
 fi
 
 if [[ -n "$ADMIN_KEY" ]]; then
+  [[ "$ADMIN_KEY" =~ ^(ssh-(ed25519|rsa)|ecdsa-sha2-nistp(256|384|521))\ [^[:space:]]+([[:space:]].*)?$ ]] || { printf 'admin: invalid SSH public key format\n' >&2; exit 1; }
   touch "$AUTHORIZED_KEYS"
   if ! grep -Fqx -- "$ADMIN_KEY" "$AUTHORIZED_KEYS"; then
     printf '%s\n' "$ADMIN_KEY" >> "$AUTHORIZED_KEYS"
@@ -59,10 +62,10 @@ fi
 
 # StrictModes compatibility: OpenSSH must see the key file and directory as
 # owned by the administrative account with restrictive permissions.
-chown "$ADMIN_USER:$ADMIN_USER" "$SSH_DIR"
+chown "$ADMIN_USER:$ADMIN_GROUP" "$SSH_DIR"
 chmod 700 "$SSH_DIR"
 [[ -e "$AUTHORIZED_KEYS" ]] || touch "$AUTHORIZED_KEYS"
-chown "$ADMIN_USER:$ADMIN_USER" "$AUTHORIZED_KEYS"
+chown "$ADMIN_USER:$ADMIN_GROUP" "$AUTHORIZED_KEYS"
 chmod 600 "$AUTHORIZED_KEYS"
 
 [[ -s "$AUTHORIZED_KEYS" ]] || {

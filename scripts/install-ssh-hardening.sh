@@ -14,10 +14,12 @@ set -a; source "$RUNTIME_FILE"; set +a
 [[ "${ADMIN_USER:-}" =~ ^[a-z][a-z0-9_-]*$ ]] || fail 'ADMIN_USER is missing or invalid'
 id "$ADMIN_USER" >/dev/null 2>&1 || fail "admin account does not exist: $ADMIN_USER"
 ADMIN_HOME=$(getent passwd "$ADMIN_USER" | cut -d: -f6)
+ADMIN_GROUP=$(id -gn "$ADMIN_USER")
 AUTHORIZED_KEYS="$ADMIN_HOME/.ssh/authorized_keys"
 [[ -s "$AUTHORIZED_KEYS" ]] || fail "admin authorized_keys is empty: $AUTHORIZED_KEYS"
-[[ "$(stat -c '%U:%G:%a' "$AUTHORIZED_KEYS")" == "$ADMIN_USER:$ADMIN_USER:600" ]] || fail 'admin authorized_keys must be owned by the admin user with mode 0600'
-[[ "$(stat -c '%U:%G:%a' "$ADMIN_HOME/.ssh")" == "$ADMIN_USER:$ADMIN_USER:700" ]] || fail 'admin .ssh directory must be owned by the admin user with mode 0700'
+ssh-keygen -lf "$AUTHORIZED_KEYS" >/dev/null 2>&1 || fail "admin authorized_keys contains no parseable public key: $AUTHORIZED_KEYS"
+[[ "$(stat -c '%U:%G:%a' "$AUTHORIZED_KEYS")" == "$ADMIN_USER:$ADMIN_GROUP:600" ]] || fail 'admin authorized_keys must be owned by the admin user with mode 0600'
+[[ "$(stat -c '%U:%G:%a' "$ADMIN_HOME/.ssh")" == "$ADMIN_USER:$ADMIN_GROUP:700" ]] || fail 'admin .ssh directory must be owned by the admin user with mode 0700'
 command -v sshd >/dev/null || fail 'sshd binary is missing'
 command -v systemctl >/dev/null || fail 'systemctl is missing'
 [[ -f "$MAIN_CONFIG" ]] || fail 'main sshd_config is missing'
@@ -58,7 +60,7 @@ chmod 0644 "$tmp"
 mv "$tmp" "$DEST"
 if ! sshd -t -f "$MAIN_CONFIG"; then rollback; fail 'sshd syntax validation failed; previous configuration restored'; fi
 effective=$(sshd -T -f "$MAIN_CONFIG" 2>/dev/null) || { rollback; fail 'sshd effective configuration could not be read'; }
-for expected in 'port 22' 'pubkeyauthentication yes' 'passwordauthentication no' 'kbdinteractiveauthentication no' 'permitrootlogin no' 'authorizedkeysfile .ssh/authorized_keys'; do
+for expected in 'port 22' 'pubkeyauthentication yes' 'passwordauthentication no' 'kbdinteractiveauthentication no' 'permitrootlogin no' 'permitemptyPasswords no' 'authorizedkeysfile .ssh/authorized_keys' 'allowtcpforwarding no' 'gatewayports no' 'permittunnel no'; do
   grep -Fqx "$expected" <<< "$effective" || { rollback; fail "effective policy mismatch: $expected; previous configuration restored"; }
 done
 if systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null; then
