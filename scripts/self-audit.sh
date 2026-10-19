@@ -104,10 +104,15 @@ else
   bad 'sshd binary is missing'
 fi
 [[ -f "$SSH_CONFIG" ]] && ok 'managed main sshd_config exists' || bad 'managed main sshd_config is missing'
-if [[ -f "$SSH_DROPIN_DIR/00-00-vps-gateway-hardening.conf" ]]; then
-  ok 'managed SSH hardening drop-in exists'
+if grep -Fqx '# Managed by vps-gateway-infra; standardized node SSH policy.' "$SSH_CONFIG"; then
+  ok 'managed SSH main configuration exists'
 else
-  bad 'managed SSH hardening drop-in is missing'
+  bad 'managed SSH main configuration marker is missing'
+fi
+if grep -Eq '^[[:space:]]*Include[[:space:]]' "$SSH_CONFIG"; then
+  bad 'SSH main configuration includes unmanaged drop-in files'
+else
+  ok 'SSH main configuration does not load unmanaged drop-ins'
 fi
 
 # Firewall policy and expected ingress.

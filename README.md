@@ -32,7 +32,7 @@ Fresh installations prompt for the values that are genuinely host/account specif
 - Cloudflare Tunnel name
 - Let's Encrypt email
 
-SSH is standardized on TCP/22. Before hardening, bootstrap requires a second SSH session to verify login with the new administrator key and successful sudo access. The hardening script backs up the existing OpenSSH configuration, validates the effective policy, and restores the backup if validation or reload fails. UFW rules are added without resetting unrelated host rules. See `docs/ssh-firewall.md`.
+SSH is standardized on TCP/22. Before hardening, bootstrap requires a second SSH session to verify login with the new administrator key and successful sudo access. The hardening script backs up the existing OpenSSH configuration, moves provider-generated SSH fragments out of the active path, validates the effective policy, and restores the backup if validation or reload fails. UFW rules are added without resetting unrelated host rules. See `docs/ssh-firewall.md`.
 
 Generated credentials and operational state stay outside Git under root-owned files.
 
