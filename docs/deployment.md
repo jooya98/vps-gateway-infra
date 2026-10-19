@@ -39,3 +39,33 @@ Run the repository checks before deployment:
 ```
 
 Runtime network behavior still needs to be verified on the fresh VPS after deployment. A successful shell test is not proof that provider routing, external reachability, or Tailscale tailnet policy is correct.
+
+## Client artifacts
+
+After deployment, the client generator writes protocol artifacts with restrictive permissions. Run it as root only when you need to regenerate them:
+
+```sh
+sudo bash ./scripts/generate-client-profiles.sh
+```
+
+The generator must not emit Reality private keys or Cloudflare tunnel tokens into client-facing files.
+
+## Connectivity audit
+
+Use the audit utility against the curated domain inventory:
+
+```sh
+./scripts/gateway-connectivity-audit.sh config/gateway/domains/ai-domains.txt
+```
+
+For an authenticated local SOCKS path:
+
+```sh
+PROXY='socks5h://user:password@127.0.0.1:1080' ./scripts/gateway-connectivity-audit.sh config/gateway/domains/ai-domains.txt
+```
+
+The audit distinguishes DNS/TCP/TLS failures from application responses. An HTTP 401, 403, 404, or 429 after successful connection means the network path reached the service, not that the application request succeeded. This audit does not enable or validate the optional DNS/SNI steering path.
+
+## Rollback
+
+Before changing managed gateway state, inspect the backup created by the deployment. The repository includes a rollback helper at deploy/rollback.sh; read its target and backup-selection behavior before invoking it. SSH configuration has a separate root-owned backup under /var/lib/vps-gateway/ssh-backups and is restored automatically when hardening validation or reload fails.
