@@ -12,17 +12,17 @@ sudo bash bootstrap.sh
 
 The primary gateway profile deploys sing-box and the configured Cloudflare Tunnel path. Review docs/ssh-firewall.md before first deployment: the intended non-root administrator key must be tested in a second SSH session before hardening is allowed to continue.
 
-The firewall is additive and does not reset UFW. SSH is standardized on TCP/22. Root login and password authentication are disabled only after the operator explicitly confirms successful login and sudo access using the administrator key.
+SSH is standardized on TCP/22. Root login and password authentication are disabled only after the operator explicitly confirms successful login and sudo access using the administrator key. After that confirmation, the final gateway firewall stage resets UFW and rebuilds the repository's gateway allow-list, replacing provider-specific rules. On later managed firewall runs, an explicitly configured Tailscale exit node's forwarding rule is also reconstructed from its saved state.
 
 ## Optional Tailscale exit node
 
-Tailscale exit-node configuration is separate from the sing-box deployment:
+Tailscale exit-node configuration is separate from the sing-box deployment and must run **after** `bootstrap.sh` succeeds and its initial self-audit passes:
 
 ```sh
 sudo bash ./scripts/configure-tailscale-exit-node.sh
 ```
 
-See docs/tailscale-exit-node.md. This does not redirect sing-box outbound traffic through Tailscale; it advertises the VPS for clients that explicitly choose it as their Tailscale exit node.
+The script requires active UFW, stores the detected WAN interface in `/etc/vps-gateway/tailscale-exit-node.conf`, and creates the forwarding rule. Approve the exit node in the Tailscale admin console, then select it on clients. Later `apply-firewall.sh` resets preserve the intended Tailscale forwarding rule by rebuilding it from the saved state. This does not redirect sing-box outbound traffic through Tailscale; see docs/tailscale-exit-node.md.
 
 ## DNS steering
 
@@ -34,7 +34,6 @@ Run the repository checks before deployment:
 
 ```sh
 ./scripts/validate-repository.sh
-./tests/test-security-policy.sh
 ./tests/test-security-policy.sh
 ./tests/test-gateway-profile.sh
 ```
