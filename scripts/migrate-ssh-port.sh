@@ -33,12 +33,10 @@ rollback(){
   systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
 }
 install -d -m 0755 "$DROPIN_DIR"
+install -d -m 0700 "$backup/disabled-provider-dropins"
 shopt -s nullglob
 for file in "$DROPIN_DIR"/*.conf; do
-  mv -- "$file" "$backup/disabled-provider-dropins/" 2>/dev/null || {
-    install -d -m 0700 "$backup/disabled-provider-dropins"
-    mv -- "$file" "$backup/disabled-provider-dropins/" || { shopt -u nullglob; rollback; fail "could not preserve provider fragment: $file"; }
-  }
+  mv -- "$file" "$backup/disabled-provider-dropins/" || { shopt -u nullglob; rollback; fail "could not preserve provider fragment: $file"; }
 done
 shopt -u nullglob
 
