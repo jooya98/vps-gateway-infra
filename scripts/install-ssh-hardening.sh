@@ -60,7 +60,7 @@ chmod 0644 "$tmp"
 mv "$tmp" "$DEST"
 if ! sshd -t -f "$MAIN_CONFIG"; then rollback; fail 'sshd syntax validation failed; previous configuration restored'; fi
 effective=$(sshd -T -f "$MAIN_CONFIG" 2>/dev/null) || { rollback; fail 'sshd effective configuration could not be read'; }
-for expected in 'port 22' 'pubkeyauthentication yes' 'passwordauthentication no' 'kbdinteractiveauthentication no' 'permitrootlogin no' 'permitemptyPasswords no' 'authorizedkeysfile .ssh/authorized_keys' 'allowtcpforwarding no' 'gatewayports no' 'permittunnel no'; do
+for expected in 'port 22' 'pubkeyauthentication yes' 'passwordauthentication no' 'kbdinteractiveauthentication no' 'permitrootlogin no' 'permitemptypasswords no' 'authorizedkeysfile .ssh/authorized_keys' 'allowtcpforwarding no' 'gatewayports no' 'permittunnel no'; do
   grep -Fqx "$expected" <<< "$effective" || { rollback; fail "effective policy mismatch: $expected; previous configuration restored"; }
 done
 if systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null; then
