@@ -7,7 +7,7 @@ Reproducible, security-focused gateway provisioning for a single comprehensive g
 On a fresh Debian/Ubuntu VPS:
 
 ```bash
-git clone https://github.com/jooya98/vps-gateway-infra.git /opt/vps-gateway-infra
+git clone --branch dev https://github.com/jooya98/vps-gateway-infra.git /opt/vps-gateway-infra
 cd /opt/vps-gateway-infra
 sudo bash bootstrap.sh
 ```
@@ -32,7 +32,7 @@ Fresh installations prompt for the values that are genuinely host/account specif
 - Cloudflare Tunnel name
 - Let's Encrypt email
 
-The gateway owns the OpenSSH server configuration. Provider-generated `sshd_config.d` fragments are removed from the active configuration and preserved only in a root-controlled backup area for forensics. SSH is standardized on TCP/22, root login is disabled, and password authentication is disabled only after the admin public key has been installed and the SSH policy has been validated.
+SSH is standardized on TCP/22. Before hardening, bootstrap requires a second SSH session to verify login with the new administrator key and successful sudo access. The hardening script backs up the existing OpenSSH configuration, validates the effective policy, and restores the backup if validation or reload fails. UFW rules are added without resetting unrelated host rules. See `docs/ssh-firewall.md`.
 
 Generated credentials and operational state stay outside Git under root-owned files.
 
@@ -48,7 +48,7 @@ The audit is read-only. It checks the effective SSH policy, admin account and SS
 
 One non-blocking security advisory is currently expected: the sing-box systemd unit does not yet declare a dedicated `User=` and therefore runs as root. This is reported as a warning rather than a deployment failure because changing it safely requires coordinated ownership of TLS private keys and other runtime files.
 
-## Network model
+## Independent network capabilities\n\nTailscale exit-node mode is optional and separate from the sing-box gateway. Configure it with `scripts/configure-tailscale-exit-node.sh`; this advertises the VPS as an exit node for clients that explicitly select it. It does not route sing-box outbound traffic through Tailscale. See `docs/tailscale-exit-node.md`. DNS/SNI steering is not in the default install path and remains optional pending end-to-end validation.\n\n## Network model
 
 ```text
                          Cloudflare
