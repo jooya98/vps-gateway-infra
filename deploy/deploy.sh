@@ -42,7 +42,7 @@ if [[ "$DRY_RUN" == 0 ]]; then
   cat <<EOF
 deploy: before SSH hardening, open a SECOND terminal on your workstation.
   1. Connect with the new administrator key: ssh -p 22 $ADMIN_USER@<VPS_ADDRESS>
-  2. Run: sudo -v && sudo id -u
+  2. Run: sudo -k && sudo -n id -u
   3. Confirm that the second command prints 0.
 Keep this root/VNC session open until the hardened SSH connection is verified.
 EOF
