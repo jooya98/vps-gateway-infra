@@ -99,13 +99,17 @@ if command -v sshd >/dev/null 2>&1; then
   [[ "$SSHD_EFFECTIVE" == *$'passwordauthentication no\n'* ]] && ok 'sshd password authentication is disabled' || bad 'sshd password authentication is not disabled'
   [[ "$SSHD_EFFECTIVE" == *$'kbdinteractiveauthentication no\n'* ]] && ok 'sshd keyboard-interactive authentication is disabled' || bad 'sshd keyboard-interactive authentication is not disabled'
   [[ "$SSHD_EFFECTIVE" == *$'permitrootlogin no\n'* ]] && ok 'sshd root login is disabled' || bad 'sshd root login is not disabled'
-  [[ "$SSHD_EFFECTIVE" == *
+  [[ "$SSHD_EFFECTIVE" == *$'permitemptypasswords no\n'* ]] && ok 'sshd empty passwords are disabled' || bad 'sshd empty passwords are not disabled'
+  [[ "$SSHD_EFFECTIVE" == *$'authorizedkeysfile .ssh/authorized_keys\n'* ]] && ok 'sshd AuthorizedKeysFile is canonical' || bad 'sshd AuthorizedKeysFile is not canonical'
+  [[ "$SSHD_EFFECTIVE" == *$'allowtcpforwarding no\n'* ]] && ok 'sshd TCP forwarding is disabled' || bad 'sshd TCP forwarding is not disabled'
+  [[ "$SSHD_EFFECTIVE" == *$'gatewayports no\n'* ]] && ok 'sshd GatewayPorts is disabled' || bad 'sshd GatewayPorts is not disabled'
+  [[ "$SSHD_EFFECTIVE" == *$'permittunnel no\n'* ]] && ok 'sshd tunnel forwarding is disabled' || bad 'sshd tunnel forwarding is not disabled'
 else
   bad 'sshd binary is missing'
 fi
 [[ -f "$SSH_CONFIG" ]] && ok 'managed main sshd_config exists' || bad 'managed main sshd_config is missing'
 if grep -Fqx '# Managed by vps-gateway-infra; standardized node SSH policy.' "$SSH_CONFIG"; then
-  ok 'managed SSH main configuration exists'
+  ok 'managed SSH main configuration marker exists'
 else
   bad 'managed SSH main configuration marker is missing'
 fi
