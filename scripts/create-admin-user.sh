@@ -74,22 +74,11 @@ chmod 600 "$AUTHORIZED_KEYS"
 }
 
 install -d -m 0755 /etc/sudoers.d
-
-# sudoers applies the last matching PASSWD/NOPASSWD tag. Put this rule after
-# the standard %sudo group rule so the admin can verify access non-interactively.
-sudoers="/etc/sudoers.d/zzzz-admin-$ADMIN_USER"
-legacy_sudoers="/etc/sudoers.d/$ADMIN_USER"
+sudoers="/etc/sudoers.d/$ADMIN_USER"
 tmp=$(mktemp)
 printf '%s\n' "$ADMIN_USER ALL=(ALL) NOPASSWD:ALL" > "$tmp"
 visudo -cf "$tmp" >/dev/null
 install -m 0440 "$tmp" "$sudoers"
 rm -f "$tmp"
-
-# Clean up the exact single-line file created by older versions of this script;
-# do not remove a same-named file if it contains additional administrator rules.
-if [[ -f "$legacy_sudoers" ]] &&
-   [[ "$(cat "$legacy_sudoers")" == "$ADMIN_USER ALL=(ALL) NOPASSWD:ALL" ]]; then
-  rm -f "$legacy_sudoers"
-fi
 visudo -c >/dev/null
-printf 'admin: ready: %s (SSH key and passwordless sudo configured)\n' "$ADMIN_USER"
+printf 'admin: ready: %s (SSH key installed)\n' "$ADMIN_USER"
