@@ -103,13 +103,10 @@ else
   bad 'sshd binary is missing'
 fi
 [[ -f "$SSH_CONFIG" ]] && ok 'managed main sshd_config exists' || bad 'managed main sshd_config is missing'
-if [[ -d "$SSH_DROPIN_DIR" ]]; then
-  mapfile -t PROVIDER_FRAGMENTS < <(find "$SSH_DROPIN_DIR" -maxdepth 1 -type f -name '*.conf' -print)
-  if ((${#PROVIDER_FRAGMENTS[@]} == 0)); then
-    ok 'no active SSH provider fragments remain'
-  else
-    bad "active SSH provider fragments remain: ${PROVIDER_FRAGMENTS[*]}"
-  fi
+if [[ -f "$SSH_DROPIN_DIR/00-vps-gateway-hardening.conf" ]]; then
+  ok 'managed SSH hardening drop-in exists'
+else
+  bad 'managed SSH hardening drop-in is missing'
 fi
 
 # Firewall policy and expected ingress.

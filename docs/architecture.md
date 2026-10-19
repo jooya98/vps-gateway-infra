@@ -1,68 +1,46 @@
 # Architecture
 
-The repository is a Debian-native personal gateway. The deployment pipeline remains
-template-driven; optional components are enabled by profile flags rather than
-being installed unconditionally.
+This repository provisions two independent network capabilities on a Debian/Ubuntu VPS:
+
+1. **sing-box gateway** — authenticated proxy endpoints rendered from the gateway profile.
+2. **Tailscale exit node** — optional network-layer egress for tailnet clients that explicitly select this VPS.
+
+Neither capability depends on the other. The sing-box outbound is currently direct; configuring Tailscale does not silently reroute sing-box traffic through the tailnet.
 
 ## Runtime topology
 
 ```text
-                         PERSONAL CLIENTS
-                               |
-          +--------------------+--------------------+
-          |                    |                    |
-        VLESS             Shadowsocks          other enabled
-          |                    |                 transports
-          +--------------------+--------------------+
-                               |
-                            sing-box
-                               |
-                             direct
-                               |
-                           Internet
+Gateway clients -> enabled sing-box inbounds -> direct outbound -> Internet
 
- DNS client -> sniproxy DNS policy -> selected domain -> VPS:443 -> SNI relay -> destination
-                           \-> normal domain -> upstream DNS -> destination
+Tailscale clients -> tailnet -> VPS exit node -> Internet
+
+Optional / not in default install path:
+DNS client -> DNS steering + SNI relay -> selected HTTPS destination
 ```
 
 ## Component boundaries
 
-- `sing-box`: authenticated proxy inbounds and direct outbound traffic.
-- `sniproxy`: optional DNS + TLS SNI steering. It does not terminate TLS for
-  the normal steering path.
-- `cloudflared`: optional tunnel client, independent of the gateway profile.
-- UFW: derives ingress rules from enabled protocol flags.
+- `sing-box`: authenticated proxy inbounds and the configured outbound (currently direct).
+- `cloudflared`: optional tunnel client for the WebSocket/HTTP-based transports.
+- `tailscaled`: optional Tailscale overlay and advertised exit-node capability.
+- UFW: additive host ingress policy for enabled gateway ports; exit-node configuration adds a forwarding rule without resetting existing UFW rules.
+- `sniproxy`: optional DNS and TLS SNI steering components. These are not enabled by the default profile and are not a supported default deployment path yet.
 
-## DNS steering semantics
+## Tailscale exit-node behavior
 
-The DNS layer is not a public recursive resolver. Its source CIDR ACL contains
-explicit allowed networks followed by reject-all rules. The domain ACL contains
-only selected service FQDNs.
+The opt-in script enables IPv4/IPv6 forwarding, advertises the VPS as an exit node, and configures the host forwarding rule. The exit-node feature must then be approved in the Tailscale admin console. Each client separately selects the node. Tailnet ACL/grant policy must permit internet routing where custom policies are used.
 
-For a selected domain:
+Tailscale exit-node routing is network-layer routing for selected tailnet clients. It is not a sing-box outbound and does not alter the generated sing-box configuration.
 
-1. client asks the gateway DNS server for the domain;
-2. the domain ACL causes sniproxy to return the VPS public address;
-3. the client opens the normal HTTPS connection to port 443;
-4. sniproxy reads the TLS SNI and opens a connection to the real destination;
-5. encrypted application traffic passes through without TLS termination.
+## DNS steering status
 
-For all other domains, DNS resolution is forwarded upstream and the client gets
-the normal destination address.
+DNS steering is **not a default capability** in the current install path. Files for the DNS/SNI approach remain in the repository, but the end-to-end setup, firewall exposure, runtime validation, and test coverage are not currently aligned well enough to promise it as operational. Do not point client DNS settings at the VPS expecting the feature to work. If reactivated later, it needs its own explicitly enabled install path and end-to-end tests.
 
-This does not guarantee service access. Destination filtering, account policy,
-regional policy, application authentication, HTTP errors, or non-TLS protocols
-can still prevent a request from succeeding.
-
-## 443 trade-off
-
-A DNS-only steering mechanism cannot change an HTTPS destination port. Therefore
-`gateway-resilient` assigns 443 to sniproxy and moves VLESS to 8443. This is an
-intentional architectural trade-off. The minimal profile keeps VLESS on 443.
+Even a working SNI steering path would not guarantee service access: destination filtering, account or regional policy, application authentication, HTTP errors, and non-TLS protocols may still prevent a request from succeeding.
 
 ## Multi-transport model
 
-Each sing-box inbound has an independent feature flag:
+Each sing-box inbound is controlled by feature flags such as:
 
 ```text
 ENABLE_VLESS
@@ -74,25 +52,19 @@ ENABLE_TUIC
 ENABLE_SOCKS
 ```
 
-VMess/Trojan/Hysteria2/TUIC require external certificate/key material when
-TLS is enabled. They are supported by the renderer but disabled by default.
+TLS transports require valid certificate/key material when enabled. The renderer validates generated JSON and the CI test checks the current gateway profile with the pinned sing-box binary.
 
 ## Secret model
 
-Secrets are read from an ignored runtime environment file. Generated config is
-mode `0600`. Client generation intentionally omits Reality private keys and
-Cloudflare tunnel tokens.
+Secrets are read from an ignored runtime environment file. Generated sing-box configuration is mode 0600. Client generation intentionally omits Reality private keys and Cloudflare tunnel tokens.
 
 ## Failure model
 
-Connectivity tests classify failures by layer:
+Connectivity tests should distinguish:
 
-```text
-DNS failure
-TCP failure
-TLS failure
-HTTP/application response
-```
+- DNS resolution failure
+- TCP/UDP reachability failure
+- TLS handshake failure
+- HTTP/application response
 
-An HTTP `401`, `403`, `404`, or `429` after successful DNS/TCP/TLS is evidence
-of a functioning network path, not a DNS/TCP/TLS failure.
+An HTTP 401, 403, 404, or 429 after successful DNS/TCP/TLS is evidence that the network path reached the service, not proof that the application request succeeded.
