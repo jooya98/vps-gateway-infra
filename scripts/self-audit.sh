@@ -124,7 +124,7 @@ if command -v ufw >/dev/null 2>&1; then
   UFW_STATUS=$(ufw status verbose 2>/dev/null || true)
   grep -q '^Status: active' <<< "$UFW_STATUS" && ok 'UFW is active' || bad 'UFW is not active'
   grep -q 'Default: deny (incoming)' <<< "$UFW_STATUS" && ok 'UFW default incoming policy is deny' || bad 'UFW default incoming policy is not deny'
-  grep -Eq '^Default: .*allow \\(outgoing\\)' <<< "$UFW_STATUS" && ok 'UFW default outgoing policy is allow' || bad 'UFW default outgoing policy is not allow'
+  grep -Eq '^Default: .*allow [(]outgoing[)]' <<< "$UFW_STATUS" && ok 'UFW default outgoing policy is allow' || bad 'UFW default outgoing policy is not allow'
   rule_tcp(){ grep -Eq "^[^|]*${1}/tcp[[:space:]]+ALLOW" <<< "$UFW_STATUS"; }
   rule_udp(){ grep -Eq "^[^|]*${1}/udp[[:space:]]+ALLOW" <<< "$UFW_STATUS"; }
   expect_tcp(){ local p=$1; rule_tcp "$p" && ok "UFW allows TCP $p" || bad "UFW missing TCP $p"; }
