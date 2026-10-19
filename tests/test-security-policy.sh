@@ -22,6 +22,7 @@ grep -q 'refusing to enable UFW before SSH migration' "$ROOT/scripts/apply-firew
 grep -q 'ufw --force reset' "$ROOT/scripts/apply-firewall.sh"
 grep -q 'migrate-ssh-port.sh' "$ROOT/deploy/deploy.sh"
 grep -q 'Port 22' "$ROOT/scripts/migrate-ssh-port.sh"
+bash -n "$ROOT/scripts/create-admin-user.sh"
 bash -n "$ROOT/scripts/migrate-ssh-port.sh"
 bash -n "$ROOT/scripts/apply-firewall.sh"
 bash -n "$ROOT/scripts/install-ssh-hardening.sh"
