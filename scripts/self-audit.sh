@@ -146,15 +146,19 @@ if command -v ufw >/dev/null 2>&1; then
 
   # Tailscale is opt-in and is audited only after its state has been recorded.
   if [[ -f "$TAILSCALE_EXIT_NODE_STATE_FILE" ]]; then
+    mode_is 600 "$TAILSCALE_EXIT_NODE_STATE_FILE" && ok 'Tailscale state file mode is 0600' || bad 'Tailscale state file mode is not 0600'
+    owned_by root root "$TAILSCALE_EXIT_NODE_STATE_FILE" && ok 'Tailscale state file owner is root:root' || bad 'Tailscale state file owner is not root:root'
     TAILSCALE_WAN_IF=$(sed -n 's/^WAN_IF=//p' "$TAILSCALE_EXIT_NODE_STATE_FILE")
     if [[ "$TAILSCALE_WAN_IF" =~ ^[-A-Za-z0-9_.:]{1,15}$ ]]; then
       IPV4_FORWARD=$(sysctl -n net.ipv4.ip_forward 2>/dev/null || printf '0')
       IPV6_FORWARD=$(sysctl -n net.ipv6.conf.all.forwarding 2>/dev/null || printf '0')
       [[ "$IPV4_FORWARD" == 1 ]] && ok 'Tailscale IPv4 forwarding is enabled' || bad 'Tailscale IPv4 forwarding is disabled'
       [[ "$IPV6_FORWARD" == 1 ]] && ok 'Tailscale IPv6 forwarding is enabled' || bad 'Tailscale IPv6 forwarding is disabled'
-      grep -Eq "Anywhere on tailscale0[[:space:]]+ALLOW FWD[[:space:]]+Anywhere on ${TAILSCALE_WAN_IF}([[:space:]]|$)" <<< "$UFW_STATUS" \
-        && ok "UFW preserves Tailscale forwarding to ${TAILSCALE_WAN_IF}" \
-        || bad "UFW is missing Tailscale forwarding to ${TAILSCALE_WAN_IF}"
+      if grep -F 'ALLOW FWD' <<< "$UFW_STATUS" | grep -F 'Anywhere on tailscale0' | grep -Fq "Anywhere on $TAILSCALE_WAN_IF"; then
+        ok "UFW preserves Tailscale forwarding to $TAILSCALE_WAN_IF"
+      else
+        bad "UFW is missing Tailscale forwarding to $TAILSCALE_WAN_IF"
+      fi
       if command -v tailscale >/dev/null 2>&1 && systemctl --quiet is-active tailscaled.service 2>/dev/null; then
         tailscale status --json 2>/dev/null | grep -Eq '"BackendState"[[:space:]]*:[[:space:]]*"Running"' \
           && ok 'Tailscale backend is Running' || bad 'Tailscale backend is not Running'
