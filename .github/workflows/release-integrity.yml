@@ -1,0 +1,29 @@
+name: release-integrity
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag matches master
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin master --depth=1
+          tag_sha=$(git rev-parse HEAD)
+          master_sha=$(git rev-parse origin/master)
+          if [[ "$tag_sha" != "$master_sha" ]]; then
+            printf 'release-integrity: tag %s does not point at origin/master\n' "$tag_sha" >&2
+            printf 'release-integrity: origin/master is %s\n' "$master_sha" >&2
+            exit 1
+          fi
+          printf 'release-integrity: tag and origin/master both point to %s\n' "$tag_sha"

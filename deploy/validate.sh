@@ -18,9 +18,9 @@ for i in x['inbounds']:
     if i['type']=='vless': assert i['tls']['reality']['enabled'] is True
     if i['type'] in {'vmess','trojan','hysteria2','tuic'}: assert i['tls']['enabled'] and i['tls'].get('certificate_path') and i['tls'].get('key_path')
 PY
-[[ -f "$OUT_DIR/ssh/00-vps-gateway-hardening.conf" ]] || { printf 'validate: missing SSH hardening output\n' >&2; exit 1; }
-grep -q '^PasswordAuthentication no$' "$OUT_DIR/ssh/00-vps-gateway-hardening.conf"
-grep -q '^PermitRootLogin no$' "$OUT_DIR/ssh/00-vps-gateway-hardening.conf"
+[[ -f "$OUT_DIR/ssh/sshd_config" ]] || { printf 'validate: missing SSH hardening output\n' >&2; exit 1; }
+grep -q '^PasswordAuthentication no$' "$OUT_DIR/ssh/sshd_config"
+grep -q '^PermitRootLogin no$' "$OUT_DIR/ssh/sshd_config"
 if [[ "$ENABLE_DNS_STEERING" == true ]]; then
   [[ -f "$OUT_DIR/sniproxy/config.yaml" && -f "$OUT_DIR/sniproxy/domains.csv" && -f "$OUT_DIR/sniproxy/cidr.csv" ]] || { printf 'validate: DNS steering outputs missing\n' >&2; exit 1; }
   grep -q '^0.0.0.0/0,reject$' "$OUT_DIR/sniproxy/cidr.csv"; grep -q '^::/0,reject$' "$OUT_DIR/sniproxy/cidr.csv"

@@ -11,13 +11,14 @@ SING_BOX_INSTALL_SCRIPT=${SING_BOX_INSTALL_SCRIPT:-"$ROOT/scripts/install-sing-b
 GENERATE_SCRIPT=${GENERATE_SCRIPT:-"$ROOT/scripts/generate-secrets.sh"}
 VALIDATE_SCRIPT=${VALIDATE_SCRIPT:-"$ROOT/scripts/validate-secrets.sh"}
 DEPLOY_SCRIPT=${DEPLOY_SCRIPT:-"$ROOT/deploy/deploy.sh"}
+SELF_AUDIT_SCRIPT=${SELF_AUDIT_SCRIPT:-"$ROOT/scripts/self-audit.sh"}
 TEST_MODE=${BOOTSTRAP_TEST_MODE:-0}
 fail(){ printf 'bootstrap: %s\n' "$1" >&2; exit 1; }
 [[ "$TEST_MODE" == 1 || $(id -u) == 0 ]] || fail 'root is required'
 [[ -f /etc/debian_version ]] || fail 'Debian-based system required'
 [[ -f "$PROFILE_FILE" ]] || fail 'comprehensive gateway profile not found'
 set -a; source "$ROOT/config/defaults.env.example"; source "$PROFILE_FILE"; set +a
-for file in "$BASE_BOOTSTRAP_SCRIPT" "$SING_BOX_INSTALL_SCRIPT" "$GENERATE_SCRIPT" "$VALIDATE_SCRIPT" "$DETECT_SCRIPT" "$DEPLOY_SCRIPT"; do [[ -f "$file" ]] || fail "required file missing: $file"; done
+for file in "$BASE_BOOTSTRAP_SCRIPT" "$SING_BOX_INSTALL_SCRIPT" "$GENERATE_SCRIPT" "$VALIDATE_SCRIPT" "$DETECT_SCRIPT" "$DEPLOY_SCRIPT" "$SELF_AUDIT_SCRIPT"; do [[ -f "$file" ]] || fail "required file missing: $file"; done
 if [[ -f "$ROOT/config/versions.env.example" ]]; then set -a; source "$ROOT/config/versions.env.example"; set +a; fi
 if [[ -f "$ROOT/config/versions.env" ]]; then set -a; source "$ROOT/config/versions.env"; set +a; fi
 if [[ -f "$ROOT/config/packages.env" && "$TEST_MODE" != 1 ]]; then bash "$BASE_BOOTSTRAP_SCRIPT"; fi
@@ -35,7 +36,9 @@ if [[ ! -f "$RUNTIME_FILE" ]]; then
 else
   if ! grep -q '^TRANSPORT_PASSWORD=' "$RUNTIME_FILE"; then runtime_set_value TRANSPORT_PASSWORD "$(openssl rand -hex 24)" "$RUNTIME_FILE"; fi
 fi
-SSH_CURRENT_PORT=$(sshd -T 2>/dev/null | awk '$1=="port"{print $2;exit}' || true); SSH_PORT=${SSH_CURRENT_PORT:-${SSH_PORT:-22}}; runtime_set_value SSH_PORT "$SSH_PORT" "$RUNTIME_FILE"
+# Gateway owns the SSH endpoint; never inherit a provider-selected port.
+SSH_PORT=22
+runtime_set_value SSH_PORT "$SSH_PORT" "$RUNTIME_FILE"
 for spec in 'ADMIN_USER|Admin username|juya' 'CLOUDFLARE_API_TOKEN|Cloudflare API token|' 'CLOUDFLARE_ACCOUNT_ID|Cloudflare account ID|' 'CLOUDFLARE_ZONE_NAME|Cloudflare zone|engine.qzz.io' 'PUBLIC_HOSTNAME|Tunnel public hostname|echo.engine.qzz.io' 'DIRECT_HOSTNAME|Direct TLS hostname|direct.echo.engine.qzz.io' 'CLOUDFLARE_TUNNEL_NAME|Cloudflare Tunnel name|echo-gateway'; do
  IFS='|' read -r name label default <<< "$spec"; current=$(awk -F= -v n="$name" '$1==n{$1="";sub(/^=/,"");print;exit}' "$RUNTIME_FILE" 2>/dev/null || true); [[ -n "$current" ]] && continue; [[ "$TEST_MODE" == 1 ]] && continue; [[ "$name" == CLOUDFLARE_API_TOKEN ]] && prompt_secret "$name" "$label" '' || prompt_value "$name" "$label" "$default"; runtime_set_value "$name" "${!name}" "$RUNTIME_FILE"
 done
@@ -47,4 +50,5 @@ fqdn_re='^[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$'
 [[ "$CLOUDFLARE_TUNNEL_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || fail 'invalid Cloudflare Tunnel name'
 PROFILE="$PROFILE" RUNTIME_FILE="$RUNTIME_FILE" CLIENT_INFO_FILE="$CLIENT_INFO_FILE" bash "$VALIDATE_SCRIPT"
 PROFILE="$PROFILE" RUNTIME_FILE="$RUNTIME_FILE" CLIENT_INFO_FILE="$CLIENT_INFO_FILE" bash "$DEPLOY_SCRIPT" --env-file "$RUNTIME_FILE"
-printf '%s\n' 'bootstrap: deployment complete'
+PROFILE="$PROFILE" RUNTIME_FILE="$RUNTIME_FILE" bash "$SELF_AUDIT_SCRIPT"
+printf '%s\n' 'bootstrap: deployment and self-audit complete'

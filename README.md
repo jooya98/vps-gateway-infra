@@ -1,18 +1,18 @@
 # VPS Gateway Infrastructure
 
-Reproducible, security-focused Debian gateway provisioning for a single comprehensive gateway profile.
+Reproducible, security-focused gateway provisioning for a single comprehensive gateway profile.
 
 ## Install
 
-On a fresh Debian VPS:
+On a fresh Debian/Ubuntu VPS:
 
 ```bash
-git clone https://github.com/jooya98/vps-gateway-infra.git /opt/vps-gateway-infra
+git clone --branch dev https://github.com/jooya98/vps-gateway-infra.git /opt/vps-gateway-infra
 cd /opt/vps-gateway-infra
 sudo bash bootstrap.sh
 ```
 
-`bootstrap.sh` is the only public installation entrypoint. It collects host-specific values interactively, preserves existing credentials when present, installs required software, configures SSH/UFW, provisions the local-managed Cloudflare Tunnel, creates DNS records, obtains the Let's Encrypt certificate through Cloudflare DNS-01, activates the complete sing-box multi-protocol configuration, and generates the client bundle.
+`bootstrap.sh` is the only public installation entrypoint. It collects host-specific values interactively, preserves existing credentials when present, installs required software, configures the gateway-owned SSH/UFW policy, provisions the local-managed Cloudflare Tunnel, creates DNS records, obtains the Let's Encrypt certificate through Cloudflare DNS-01, activates the complete sing-box multi-protocol configuration, generates the client bundle, and runs a final read-only self-audit.
 
 No `export`, separate activation command, profile selection, or manual certificate installation is required.
 
@@ -21,6 +21,9 @@ No `export`, separate activation command, profile selection, or manual certifica
 Fresh installations prompt for the values that are genuinely host/account specific:
 
 - SOCKS/HTTP username
+- Admin username
+- Initial admin password
+- Admin SSH public key
 - Cloudflare API token
 - Cloudflare account ID
 - Cloudflare zone
@@ -29,7 +32,31 @@ Fresh installations prompt for the values that are genuinely host/account specif
 - Cloudflare Tunnel name
 - Let's Encrypt email
 
+SSH is standardized on TCP/22. Before hardening, bootstrap requires a second SSH session to verify login with the new administrator key and successful sudo access. The hardening script backs up the existing OpenSSH configuration, moves provider-generated SSH fragments out of the active path, validates the effective policy, and restores the backup if validation or reload fails. The SSH migration first backs up and replaces provider SSH settings to move the listener to TCP/22, temporarily retaining root/password access until the new admin key is verified. After SSH hardening, UFW is reset and rebuilt from the repository allow-list, intentionally replacing provider-specific firewall rules. See `docs/ssh-firewall.md`.
+
 Generated credentials and operational state stay outside Git under root-owned files.
+
+## Final self-audit
+
+After deployment, `bootstrap.sh` automatically runs:
+
+```bash
+sudo bash ./scripts/self-audit.sh
+```
+
+The audit is read-only. It checks the effective SSH policy, admin account and SSH key ownership/permissions, sudoers permissions, UFW state and expected ingress rules, public and loopback listeners, sing-box and Cloudflare Tunnel service health, native configuration validation, TLS material, Cloudflare state/credential permissions, and DNS resolution of the configured hostnames. If Tailscale exit-node state has been recorded, it also checks IP forwarding, the UFW forwarding rule and Tailscale backend health. It exits non-zero when a required check fails.
+
+One non-blocking security advisory is currently expected: the sing-box systemd unit does not yet declare a dedicated `User=` and therefore runs as root. This is reported as a warning rather than a deployment failure because changing it safely requires coordinated ownership of TLS private keys and other runtime files.
+
+## Independent network capabilities
+
+Tailscale exit-node mode is optional and separate from the sing-box gateway. **Run it only after `bootstrap.sh` and the initial self-audit succeed**:
+
+```bash
+sudo bash ./scripts/configure-tailscale-exit-node.sh
+```
+
+This installs Tailscale if needed, enables IPv4/IPv6 forwarding, records the WAN interface in `/etc/vps-gateway/tailscale-exit-node.conf`, adds the UFW forwarding rule and advertises the VPS as an exit node. Approve the exit node in the Tailscale admin console, then select it explicitly on clients. It does not route sing-box outbound traffic through Tailscale. When a later managed gateway firewall run resets UFW, `apply-firewall.sh` restores this forwarding rule from the recorded state. See `docs/tailscale-exit-node.md`. DNS/SNI steering is not in the default install path and remains optional pending end-to-end validation.
 
 ## Network model
 
@@ -42,14 +69,16 @@ Generated credentials and operational state stay outside Git under root-owned fi
                      /       |       \
               VLESS-WS   VMess-WS   HTTPUpgrade
                               |
-                            Echo
+                            Gateway
 
- direct.echo.engine.qzz.io  ---- DNS-only A ----> Echo
+ direct.echo.engine.qzz.io  ---- DNS-only A ----> Gateway
                               |
                  TLS / QUIC direct transports
 ```
 
 The Cloudflare hostname is proxied through the Tunnel. The direct hostname is intentionally DNS-only because raw TCP/UDP transports are not carried by the standard HTTP ingress path.
+
+The deployment deliberately mixes both paths. Only the VLESS-WebSocket, VMess-WebSocket, and VLESS-HTTPUpgrade origins are loopback-only behind Cloudflare Tunnel. The other enabled transports are direct public inbounds: VLESS Reality TCP/8443, Shadowsocks TCP/8444, Shadowsocks 2022 TCP/8445, Hysteria2 UDP/8446, TUIC UDP/8447, Trojan TCP/8448, AnyTLS TCP/8449, and VLESS gRPC TCP/8450. Authenticated SOCKS5 TCP/1080 and HTTP proxy TCP/8080 are also intentionally public in this profile. SSH is on TCP/22. These openings are intentional profile policy, not an assumption that Cloudflare proxies every protocol.
 
 ## Client bundle
 
@@ -77,11 +106,12 @@ Managed sing-box configuration changes are backed up before activation and autom
 
 ## Development
 
-All development happens on `feat/resilient-gateway`. `master` is reserved for the production release state.
+`master` is the production baseline. Development changes are made on dedicated branches and merged into `master` only after validation.
 
-Repository tests live under `tests/`. The intended validation path is:
+Repository tests live under `tests/`. The intended validation path includes:
 
 ```bash
 ./scripts/validate-repository.sh
-./tests/test-local.sh
+./tests/test-security-policy.sh
+./tests/test-gateway-profile.sh
 ```

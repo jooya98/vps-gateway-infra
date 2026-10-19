@@ -26,7 +26,7 @@ if not inbounds: raise SystemExit("render: no sing-box inbound is enabled")
 template=(root/"templates/sing-box/config.json.tmpl").read_text().replace("${SING_BOX_INBOUNDS_JSON}",json.dumps(inbounds,indent=2)).replace("${SING_BOX_LOG_LEVEL}",env["SING_BOX_LOG_LEVEL"])
 if re.search(r"\$\{[A-Z][A-Z0-9_]*\}",template): raise SystemExit("render: unresolved template variable")
 json.loads(template); (out/"sing-box/config.json").write_text(template+"\n")
-for src,dst in [("templates/sing-box/sing-box.service.tmpl","sing-box/sing-box.service"),("templates/ssh/00-vps-gateway-hardening.conf.tmpl","ssh/00-vps-gateway-hardening.conf")]:
+for src,dst in [("templates/sing-box/sing-box.service.tmpl","sing-box/sing-box.service"),("templates/ssh/sshd_config.tmpl","ssh/sshd_config")]:
  text=(root/src).read_text(); text=re.sub(r"\$\{([A-Z][A-Z0-9_]*)\}",lambda m:env.get(m.group(1),m.group(0)),text); (out/dst).write_text(text)
 if truth("ENABLE_CLOUDFLARED"):
  text=(root/"templates/cloudflared/cloudflared.service.tmpl").read_text(); text=re.sub(r"\$\{([A-Z][A-Z0-9_]*)\}",lambda m:env.get(m.group(1),m.group(0)),text); (out/"cloudflared/cloudflared.service").write_text(text)
@@ -63,7 +63,7 @@ acl:
 '''
  (out/"sniproxy/config.yaml").write_text(yaml)
 PY
-chmod 0600 "$OUT_DIR/sing-box/config.json"; chmod 0644 "$OUT_DIR"/sing-box/sing-box.service "$OUT_DIR"/ssh/00-vps-gateway-hardening.conf
+chmod 0600 "$OUT_DIR/sing-box/config.json"; chmod 0644 "$OUT_DIR"/sing-box/sing-box.service "$OUT_DIR"/ssh/sshd_config
 if [[ -f "$OUT_DIR/cloudflared/cloudflared.service" ]]; then chmod 0644 "$OUT_DIR/cloudflared/cloudflared.service"; fi
 if compgen -G "$OUT_DIR/sniproxy/*" >/dev/null 2>&1; then chmod 0644 "$OUT_DIR"/sniproxy/*; fi
 printf 'render: generated profile=%s under %s\n' "$PROFILE" "$OUT_DIR"
