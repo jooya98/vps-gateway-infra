@@ -23,12 +23,12 @@ DNS client -> DNS steering + SNI relay -> selected HTTPS destination
 - `sing-box`: authenticated proxy inbounds and the configured outbound (currently direct).
 - `cloudflared`: optional tunnel client for the WebSocket/HTTP-based transports.
 - `tailscaled`: optional Tailscale overlay and advertised exit-node capability.
-- UFW: additive host ingress policy for enabled gateway ports; exit-node configuration adds a forwarding rule without resetting existing UFW rules.
+- UFW: the gateway firewall is authoritative and may reset/rebuild ingress rules. Once Tailscale is explicitly configured, its WAN interface is recorded under `/etc/vps-gateway/tailscale-exit-node.conf`; managed UFW resets read that state and recreate the `tailscale0` forwarding rule. Initial gateway bootstrap does not install or enable Tailscale.
 - `sniproxy`: optional DNS and TLS SNI steering components. These are not enabled by the default profile and are not a supported default deployment path yet.
 
 ## Tailscale exit-node behavior
 
-The opt-in script enables IPv4/IPv6 forwarding, advertises the VPS as an exit node, and configures the host forwarding rule. The exit-node feature must then be approved in the Tailscale admin console. Each client separately selects the node. Tailnet ACL/grant policy must permit internet routing where custom policies are used.
+Run the opt-in script only after the gateway bootstrap and initial self-audit have completed, so its forwarding rule is applied after the initial UFW reset. The script requires UFW to be active, enables IPv4/IPv6 forwarding, installs/authenticates Tailscale, advertises the VPS as an exit node, records the detected WAN interface, and configures UFW forwarding. The exit-node feature must then be approved in the Tailscale admin console. Each client separately selects the node. Tailnet ACL/grant policy must permit internet routing where custom policies are used. A later managed UFW reset reconstructs the forwarding rule from the saved interface.
 
 Tailscale exit-node routing is network-layer routing for selected tailnet clients. It is not a sing-box outbound and does not alter the generated sing-box configuration.
 
