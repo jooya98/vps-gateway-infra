@@ -18,6 +18,17 @@ Optional / not in default install path:
 DNS client -> DNS steering + SNI relay -> selected HTTPS destination
 ```
 
+## Inbound exposure policy
+
+The gateway deliberately uses a hybrid network model rather than forcing every protocol through Cloudflare:
+
+- **Cloudflare Tunnel over HTTPS/443:** VLESS WebSocket at `/vless-ws`, VMess WebSocket at `/vmess-ws`, and VLESS HTTPUpgrade at `/vless-hu`. Their sing-box origins bind to loopback ports 18080, 18081, and 18082; those origin ports are not public firewall ingress.
+- **Direct public TCP/UDP:** VLESS Reality TCP/8443; Shadowsocks TCP/8444; Shadowsocks 2022 TCP/8445; Hysteria2 UDP/8446; TUIC UDP/8447; Trojan TCP/8448; AnyTLS TCP/8449; and VLESS gRPC TCP/8450. The enabled direct protocols are intentional parts of the gateway profile, not Cloudflare Tunnel routes.
+- **Public authenticated proxies:** SOCKS5 TCP/1080 and HTTP proxy TCP/8080 are intentionally exposed on public interfaces by the gateway profile. They use the configured SOCKS/HTTP username and password. Keep those credentials strong and private.
+- **Management:** SSH is TCP/22 and uses administrator public-key authentication; root SSH login and password-based SSH authentication are disabled after the verified migration.
+
+UFW recreates this profile's public ingress allow-list, including the intended IPv4/IPv6 rules. The direct hostname is DNS-only and does not proxy raw TCP/UDP transports. A Cloudflare DNS record by itself does not tunnel a direct inbound.
+
 ## Component boundaries
 
 - `sing-box`: authenticated proxy inbounds and the configured outbound (currently direct).
