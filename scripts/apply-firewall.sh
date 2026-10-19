@@ -2,6 +2,7 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DRY_RUN=${DRY_RUN:-0}
+RESET_UFW=${RESET_UFW:-1}
 POLICY_FILE=${POLICY_FILE:-"$ROOT/config/firewall/policy.env.example"}
 PROFILE=${PROFILE:-gateway}
 ENV_FILE=${ENV_FILE:-${RUNTIME_FILE:-}}
@@ -20,7 +21,7 @@ done
 commands=()
 allow_tcp(){ local port=$1 from=$2; if [[ "$from" == any ]]; then commands+=("ufw allow ${port}/tcp"); else commands+=("ufw allow from ${from} to any port ${port} proto tcp"); fi; }
 allow_udp(){ local port=$1 from=$2; if [[ "$from" == any ]]; then commands+=("ufw allow ${port}/udp"); else commands+=("ufw allow from ${from} to any port ${port} proto udp"); fi; }
-# Add the management rule first. Never reset UFW: unrelated rules belong to the host.
+# Add management and enabled gateway rules. The final policy intentionally replaces provider UFW rules; migration mode preserves them until admin access is verified.
 allow_tcp "$SSH_PORT" "$SSH_ALLOW_FROM"
 [[ "$ENABLE_VLESS" == true ]] && allow_tcp "$VLESS_PORT" "$VLESS_ALLOW_FROM"
 [[ "$ENABLE_SHADOWSOCKS" == true ]] && allow_tcp "$SHADOWSOCKS_PORT" "$SHADOWSOCKS_ALLOW_FROM"
@@ -33,6 +34,7 @@ allow_tcp "$SSH_PORT" "$SSH_ALLOW_FROM"
 [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && allow_tcp "$SOCKS_LISTEN_PORT" "$SOCKS_ALLOW_FROM"
 [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && allow_tcp "$HTTP_PORT" "$SOCKS_ALLOW_FROM"
 if [[ "$DRY_RUN" == 1 ]]; then
+  [[ "$RESET_UFW" == 1 ]] && printf '%s\n' 'ufw --force reset'
   printf '%s\n' "${commands[@]}"
   printf '%s\n' 'ufw default deny incoming' 'ufw default allow outgoing' 'ufw --force enable'
   exit 0
@@ -42,6 +44,7 @@ command -v ufw >/dev/null || fail 'ufw is not installed'
 command -v sshd >/dev/null || fail 'sshd is not installed; refusing to enable UFW without a verified SSH policy'
 effective_ssh=$(sshd -T 2>/dev/null) || fail 'could not read effective sshd configuration; UFW was not changed'
 grep -Fqx 'port 22' <<< "$effective_ssh" || fail 'sshd is not configured to listen on TCP/22; refusing to enable UFW before SSH migration'
+if [[ "$RESET_UFW" == 1 ]]; then ufw --force reset >/dev/null; fi
 for line in "${commands[@]}"; do read -r -a argv <<< "$line"; "${argv[@]}" >/dev/null; done
 ufw default deny incoming >/dev/null
 ufw default allow outgoing >/dev/null

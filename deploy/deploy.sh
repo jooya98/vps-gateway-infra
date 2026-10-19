@@ -34,8 +34,10 @@ if [[ "$DRY_RUN" == 0 ]]; then
   ADMIN_KEY=${ADMIN_KEY:-}
   ADMIN_USER="$ADMIN_USER" ADMIN_KEY="$ADMIN_KEY" bash "$ROOT/scripts/create-admin-user.sh"
 
-  # Apply the allow-list before enabling the deny-incoming firewall policy.
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/apply-firewall.sh"
+  # First migrate the SSH listener, preserving root/password access and provider
+  # firewall rules until the new admin-key connection has been verified.
+  bash "$ROOT/scripts/migrate-ssh-port.sh"
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" RESET_UFW=0 bash "$ROOT/scripts/apply-firewall.sh"
 
   cat <<EOF
 deploy: before SSH hardening, open a SECOND terminal on your workstation.
@@ -49,6 +51,11 @@ EOF
   [[ "$SSH_CONFIRM" == YES ]] || fail 'SSH hardening cancelled; root/password policy has not been changed'
 
   SSH_ADMIN_LOGIN_VERIFIED=YES RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/install-ssh-hardening.sh"
+
+  # The admin connection has been verified and the standardized SSH policy is
+  # active. Now replace provider UFW rules with the declared gateway allow-list.
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" RESET_UFW=1 bash "$ROOT/scripts/apply-firewall.sh"
+
   [[ -x "$CLOUDFLARED_BIN" ]] || bash "$ROOT/scripts/install-cloudflared.sh"
   PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/provision-cloudflare.sh"
   PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" bash "$ROOT/scripts/ensure-tls-certificate.sh"
@@ -59,6 +66,6 @@ EOF
 else
   if [[ -x "$CLOUDFLARED_BIN" ]]; then PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" DRY_RUN=1 bash "$ROOT/scripts/provision-cloudflare.sh"; fi
   PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" DRY_RUN=1 bash "$ROOT/scripts/activate-multiprotocol.sh"
-  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" DRY_RUN=1 bash "$ROOT/scripts/apply-firewall.sh"
+  PROFILE="$PROFILE" RUNTIME_FILE="$ENV_FILE" RESET_UFW=1 DRY_RUN=1 bash "$ROOT/scripts/apply-firewall.sh"
 fi
 printf 'deploy: complete (profile=%s)\n' "$PROFILE"
