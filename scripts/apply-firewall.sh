@@ -39,6 +39,9 @@ if [[ "$DRY_RUN" == 1 ]]; then
 fi
 [[ $(id -u) == 0 ]] || fail 'root is required'
 command -v ufw >/dev/null || fail 'ufw is not installed'
+command -v sshd >/dev/null || fail 'sshd is not installed; refusing to enable UFW without a verified SSH policy'
+effective_ssh=$(sshd -T 2>/dev/null) || fail 'could not read effective sshd configuration; UFW was not changed'
+grep -Fqx 'port 22' <<< "$effective_ssh" || fail 'sshd is not configured to listen on TCP/22; refusing to enable UFW before SSH migration'
 for line in "${commands[@]}"; do read -r -a argv <<< "$line"; "${argv[@]}" >/dev/null; done
 ufw default deny incoming >/dev/null
 ufw default allow outgoing >/dev/null
