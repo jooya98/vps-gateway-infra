@@ -78,6 +78,8 @@ This installs Tailscale if needed, enables IPv4/IPv6 forwarding, records the WAN
 
 The Cloudflare hostname is proxied through the Tunnel. The direct hostname is intentionally DNS-only because raw TCP/UDP transports are not carried by the standard HTTP ingress path.
 
+The deployment deliberately mixes both paths. Only the VLESS-WebSocket, VMess-WebSocket, and VLESS-HTTPUpgrade origins are loopback-only behind Cloudflare Tunnel. The other enabled transports are direct public inbounds: VLESS Reality TCP/8443, Shadowsocks TCP/8444, Shadowsocks 2022 TCP/8445, Hysteria2 UDP/8446, TUIC UDP/8447, Trojan TCP/8448, AnyTLS TCP/8449, and VLESS gRPC TCP/8450. Authenticated SOCKS5 TCP/1080 and HTTP proxy TCP/8080 are also intentionally public in this profile. SSH is on TCP/22. These openings are intentional profile policy, not an assumption that Cloudflare proxies every protocol.
+
 ## Client bundle
 
 After installation, the complete bundle is generated under:
