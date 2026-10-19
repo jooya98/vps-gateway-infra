@@ -33,6 +33,16 @@ allow_tcp "$SSH_PORT" "$SSH_ALLOW_FROM"
 [[ "${ENABLE_DIRECT_TLS:-0}" == 1 ]] && allow_tcp "$VLESS_GRPC_PORT" "$TROJAN_ALLOW_FROM"
 [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && allow_tcp "$SOCKS_LISTEN_PORT" "$SOCKS_ALLOW_FROM"
 [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && allow_tcp "$HTTP_PORT" "$SOCKS_ALLOW_FROM"
+
+# The Tailscale exit-node script records the WAN interface after opt-in setup.
+# If a later gateway deployment resets UFW, restore the required forwarding rule.
+TAILSCALE_EXIT_NODE_STATE_FILE=${TAILSCALE_EXIT_NODE_STATE_FILE:-/etc/vps-gateway/tailscale-exit-node.conf}
+if [[ -f "$TAILSCALE_EXIT_NODE_STATE_FILE" ]]; then
+  TAILSCALE_WAN_IF=$(sed -n 's/^WAN_IF=//p' "$TAILSCALE_EXIT_NODE_STATE_FILE")
+  [[ "$TAILSCALE_WAN_IF" =~ ^[-A-Za-z0-9_.:]{1,15}$ ]] || fail "invalid WAN_IF in Tailscale state file: $TAILSCALE_EXIT_NODE_STATE_FILE"
+  commands+=("ufw route allow in on tailscale0 out on $TAILSCALE_WAN_IF")
+fi
+
 if [[ "$DRY_RUN" == 1 ]]; then
   [[ "$RESET_UFW" == 1 ]] && printf '%s\n' 'ufw --force reset'
   printf '%s\n' "${commands[@]}"
