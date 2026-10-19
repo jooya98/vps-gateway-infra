@@ -80,7 +80,7 @@ if [[ -n "${ADMIN_USER:-}" ]] && id "$ADMIN_USER" >/dev/null 2>&1; then
     owned_by "$ADMIN_USER" "$ADMIN_GROUP" "$AUTHORIZED_KEYS" && ok 'authorized_keys owner is correct' || bad 'authorized_keys owner is incorrect'
     ssh-keygen -lf "$AUTHORIZED_KEYS" >/dev/null 2>&1 && ok 'authorized_keys contains parseable SSH public key material' || bad 'authorized_keys is not parseable by ssh-keygen'
   fi
-  SUDOERS_FILE="/etc/sudoers.d/$ADMIN_USER"
+  SUDOERS_FILE="/etc/sudoers.d/zzzz-admin-$ADMIN_USER"
   [[ -f "$SUDOERS_FILE" ]] && ok 'admin sudoers file exists' || bad 'admin sudoers file is missing'
   if [[ -f "$SUDOERS_FILE" ]]; then
     mode_is 440 "$SUDOERS_FILE" && ok 'admin sudoers mode is 0440' || bad 'admin sudoers mode is not 0440'
