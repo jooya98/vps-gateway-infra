@@ -44,13 +44,19 @@ After deployment, `bootstrap.sh` automatically runs:
 sudo bash ./scripts/self-audit.sh
 ```
 
-The audit is read-only. It checks the effective SSH policy, admin account and SSH key ownership/permissions, sudoers permissions, UFW state and expected ingress rules, public and loopback listeners, sing-box and Cloudflare Tunnel service health, native configuration validation, TLS material, Cloudflare state/credential permissions, and DNS resolution of the configured hostnames. It exits non-zero when a required check fails.
+The audit is read-only. It checks the effective SSH policy, admin account and SSH key ownership/permissions, sudoers permissions, UFW state and expected ingress rules, public and loopback listeners, sing-box and Cloudflare Tunnel service health, native configuration validation, TLS material, Cloudflare state/credential permissions, and DNS resolution of the configured hostnames. If Tailscale exit-node state has been recorded, it also checks IP forwarding, the UFW forwarding rule and Tailscale backend health. It exits non-zero when a required check fails.
 
 One non-blocking security advisory is currently expected: the sing-box systemd unit does not yet declare a dedicated `User=` and therefore runs as root. This is reported as a warning rather than a deployment failure because changing it safely requires coordinated ownership of TLS private keys and other runtime files.
 
 ## Independent network capabilities
 
-Tailscale exit-node mode is optional and separate from the sing-box gateway. Configure it with `scripts/configure-tailscale-exit-node.sh`; this advertises the VPS as an exit node for clients that explicitly select it. It does not route sing-box outbound traffic through Tailscale. See `docs/tailscale-exit-node.md`. DNS/SNI steering is not in the default install path and remains optional pending end-to-end validation.
+Tailscale exit-node mode is optional and separate from the sing-box gateway. **Run it only after `bootstrap.sh` and the initial self-audit succeed**:
+
+```bash
+sudo bash ./scripts/configure-tailscale-exit-node.sh
+```
+
+This installs Tailscale if needed, enables IPv4/IPv6 forwarding, records the WAN interface in `/etc/vps-gateway/tailscale-exit-node.conf`, adds the UFW forwarding rule and advertises the VPS as an exit node. Approve the exit node in the Tailscale admin console, then select it explicitly on clients. It does not route sing-box outbound traffic through Tailscale. When a later managed gateway firewall run resets UFW, `apply-firewall.sh` restores this forwarding rule from the recorded state. See `docs/tailscale-exit-node.md`. DNS/SNI steering is not in the default install path and remains optional pending end-to-end validation.
 
 ## Network model
 
