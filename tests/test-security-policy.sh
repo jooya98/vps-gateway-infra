@@ -37,9 +37,9 @@ printf '%s\n' 'test-security-policy: passed'
 
 # Regression: UFW reports incoming/outgoing defaults together on one line.
 ufw_defaults_sample='Default: deny (incoming), allow (outgoing), disabled (routed)'
-grep -Eq '^Default: deny \\(incoming\\)' <<< "$ufw_defaults_sample"
-grep -Eq '^Default: .*allow \\(outgoing\\)' <<< "$ufw_defaults_sample"
-grep -Fq 'Default: .*allow \\(outgoing\\)' "$ROOT/scripts/self-audit.sh"
+grep -Eq '^Default: deny [(]incoming[)]' <<< "$ufw_defaults_sample"
+grep -Eq '^Default: .*allow [(]outgoing[)]' <<< "$ufw_defaults_sample"
+grep -Fq 'Default: .*allow [(]outgoing[)]' "$ROOT/scripts/self-audit.sh"
 
 tailscale=$(DRY_RUN=1 bash "$ROOT/scripts/configure-tailscale-exit-node.sh")
 grep -q 'forwarding' <<< "$tailscale"
