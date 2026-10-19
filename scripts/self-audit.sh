@@ -126,9 +126,11 @@ if command -v ufw >/dev/null 2>&1; then
   grep -q 'Default: deny (incoming)' <<< "$UFW_STATUS" && ok 'UFW default incoming policy is deny' || bad 'UFW default incoming policy is not deny'
   grep -Eq '^Default: .*allow [(]outgoing[)]' <<< "$UFW_STATUS" && ok 'UFW default outgoing policy is allow' || bad 'UFW default outgoing policy is not allow'
   rule_tcp(){ grep -Eq "^[^|]*${1}/tcp[[:space:]]+ALLOW" <<< "$UFW_STATUS"; }
+  rule_tcp_any(){ grep -Eq "^[^|]*${1}/tcp[[:space:]]+ALLOW IN[[:space:]]+Anywhere([[:space:]]|$)" <<< "$UFW_STATUS"; }
   rule_udp(){ grep -Eq "^[^|]*${1}/udp[[:space:]]+ALLOW" <<< "$UFW_STATUS"; }
   expect_tcp(){ local p=$1; rule_tcp "$p" && ok "UFW allows TCP $p" || bad "UFW missing TCP $p"; }
   expect_udp(){ local p=$1; rule_udp "$p" && ok "UFW allows UDP $p" || bad "UFW missing UDP $p"; }
+  expect_tcp_public(){ local p=$1; rule_tcp_any "$p" && ok "UFW allows public TCP $p" || bad "UFW missing public TCP $p"; }
   expect_tcp 22
   [[ "$ENABLE_VLESS" == true ]] && expect_tcp "$VLESS_PORT"
   [[ "$ENABLE_SHADOWSOCKS" == true ]] && expect_tcp "$SHADOWSOCKS_PORT"
@@ -138,8 +140,8 @@ if command -v ufw >/dev/null 2>&1; then
   [[ "$ENABLE_TROJAN" == true ]] && expect_tcp "$TROJAN_PORT"
   [[ "$ENABLE_DIRECT_TLS" == 1 ]] && expect_tcp "$ANYTLS_PORT"
   [[ "$ENABLE_DIRECT_TLS" == 1 ]] && expect_tcp "$VLESS_GRPC_PORT"
-  [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && expect_tcp "$SOCKS_LISTEN_PORT"
-  [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && expect_tcp "$HTTP_PORT"
+  [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && expect_tcp_public "$SOCKS_LISTEN_PORT"
+  [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && expect_tcp_public "$HTTP_PORT"
 else
   bad 'ufw binary is missing'
 fi
