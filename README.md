@@ -104,5 +104,6 @@ Repository tests live under `tests/`. The intended validation path includes:
 
 ```bash
 ./scripts/validate-repository.sh
-./tests/test-local.sh
+./tests/test-security-policy.sh
+./tests/test-gateway-profile.sh
 ```

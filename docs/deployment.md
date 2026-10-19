@@ -35,7 +35,8 @@ Run the repository checks before deployment:
 ```sh
 ./scripts/validate-repository.sh
 ./tests/test-security-policy.sh
-./tests/test-local.sh
+./tests/test-security-policy.sh
+./tests/test-gateway-profile.sh
 ```
 
 Runtime network behavior still needs to be verified on the fresh VPS after deployment. A successful shell test is not proof that provider routing, external reachability, or Tailscale tailnet policy is correct.
