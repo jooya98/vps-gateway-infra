@@ -18,6 +18,7 @@ TLS_CERT=${TLS_CERT_PATH:-/etc/sing-box/server.crt}
 TLS_KEY=${TLS_KEY_PATH:-/etc/sing-box/server.key}
 CLOUDFLARE_STATE=/root/vps-gateway-cloudflared.conf
 MULTI_RUNTIME_FILE=/root/vps-gateway-multiprotocol.conf
+TAILSCALE_EXIT_NODE_STATE_FILE=${TAILSCALE_EXIT_NODE_STATE_FILE:-/etc/vps-gateway/tailscale-exit-node.conf}
 
 PASS=0
 FAIL=0
@@ -142,6 +143,28 @@ if command -v ufw >/dev/null 2>&1; then
   [[ "$ENABLE_DIRECT_TLS" == 1 ]] && expect_tcp "$VLESS_GRPC_PORT"
   [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && expect_tcp_public "$SOCKS_LISTEN_PORT"
   [[ "$ENABLE_SOCKS" == true && "${ALLOW_PUBLIC_SOCKS:-false}" == true ]] && expect_tcp_public "$HTTP_PORT"
+
+  # Tailscale is opt-in and is audited only after its state has been recorded.
+  if [[ -f "$TAILSCALE_EXIT_NODE_STATE_FILE" ]]; then
+    TAILSCALE_WAN_IF=$(sed -n 's/^WAN_IF=//p' "$TAILSCALE_EXIT_NODE_STATE_FILE")
+    if [[ "$TAILSCALE_WAN_IF" =~ ^[-A-Za-z0-9_.:]{1,15}$ ]]; then
+      IPV4_FORWARD=$(sysctl -n net.ipv4.ip_forward 2>/dev/null || printf '0')
+      IPV6_FORWARD=$(sysctl -n net.ipv6.conf.all.forwarding 2>/dev/null || printf '0')
+      [[ "$IPV4_FORWARD" == 1 ]] && ok 'Tailscale IPv4 forwarding is enabled' || bad 'Tailscale IPv4 forwarding is disabled'
+      [[ "$IPV6_FORWARD" == 1 ]] && ok 'Tailscale IPv6 forwarding is enabled' || bad 'Tailscale IPv6 forwarding is disabled'
+      grep -Eq "Anywhere on tailscale0[[:space:]]+ALLOW FWD[[:space:]]+Anywhere on ${TAILSCALE_WAN_IF}([[:space:]]|$)" <<< "$UFW_STATUS" \
+        && ok "UFW preserves Tailscale forwarding to ${TAILSCALE_WAN_IF}" \
+        || bad "UFW is missing Tailscale forwarding to ${TAILSCALE_WAN_IF}"
+      if command -v tailscale >/dev/null 2>&1 && systemctl --quiet is-active tailscaled.service 2>/dev/null; then
+        tailscale status --json 2>/dev/null | grep -Eq '"BackendState"[[:space:]]*:[[:space:]]*"Running"' \
+          && ok 'Tailscale backend is Running' || bad 'Tailscale backend is not Running'
+      else
+        bad 'Tailscale is configured as an exit node but tailscaled is not active'
+      fi
+    else
+      bad "invalid WAN_IF in Tailscale state file: $TAILSCALE_EXIT_NODE_STATE_FILE"
+    fi
+  fi
 else
   bad 'ufw binary is missing'
 fi
