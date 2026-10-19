@@ -18,17 +18,17 @@ fi
 
 ADMIN_KEY=${ADMIN_KEY:-}
 [[ "$ADMIN_USER" =~ ^[a-z][a-z0-9_-]*$ ]] || { printf 'admin: invalid username\n' >&2; exit 1; }
-if ! id "$ADMIN_USER" >/dev/null 2>&1; then
+
+# Avoid querying getent for a nonexistent account with strict shell options.
+if id "$ADMIN_USER" >/dev/null 2>&1; then
+  USER_HOME=$(getent passwd "$ADMIN_USER" | cut -d: -f6)
+else
   while true; do
     read -r -s -p "Initial password for $ADMIN_USER: " PASS1; printf '\n'
     read -r -s -p 'Confirm password: ' PASS2; printf '\n'
     [[ -n "$PASS1" && "$PASS1" == "$PASS2" ]] && break
     printf '%s\n' 'Passwords do not match or are empty.' >&2
   done
-fi
-
-USER_HOME=$(getent passwd "$ADMIN_USER" | cut -d: -f6)
-if [[ -z "$USER_HOME" ]]; then
   useradd -m -s /bin/bash "$ADMIN_USER"
   printf '%s:%s\n' "$ADMIN_USER" "$PASS1" | chpasswd
   unset PASS1 PASS2
