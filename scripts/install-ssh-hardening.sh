@@ -4,7 +4,7 @@ RUNTIME_FILE=${RUNTIME_FILE:-/root/vps-gateway-runtime.conf}
 BACKUP_ROOT=/var/lib/vps-gateway/ssh-backups
 MAIN_CONFIG=/etc/ssh/sshd_config
 DROPIN_DIR=/etc/ssh/sshd_config.d
-DEST="$DROPIN_DIR/00-vps-gateway-hardening.conf"
+DEST="$DROPIN_DIR/00-00-vps-gateway-hardening.conf"
 fail(){ printf 'ssh-hardening: %s\n' "$1" >&2; exit 1; }
 [[ $(id -u) == 0 ]] || fail 'root is required'
 [[ -f "$RUNTIME_FILE" ]] || fail 'runtime file missing'
@@ -24,8 +24,8 @@ command -v sshd >/dev/null || fail 'sshd binary is missing'
 command -v systemctl >/dev/null || fail 'systemctl is missing'
 [[ -f "$MAIN_CONFIG" ]] || fail 'main sshd_config is missing'
 stamp=$(date +%Y%m%d-%H%M%S)
-backup="$BACKUP_ROOT/$stamp"
-install -d -m 0700 "$backup"
+install -d -m 0700 "$BACKUP_ROOT"
+backup=$(mktemp -d "$BACKUP_ROOT/$stamp.XXXXXX")
 cp -a "$MAIN_CONFIG" "$backup/sshd_config"
 if [[ -d "$DROPIN_DIR" ]]; then cp -a "$DROPIN_DIR" "$backup/sshd_config.d"; else mkdir -m 0755 "$backup/sshd_config.d"; fi
 rollback(){

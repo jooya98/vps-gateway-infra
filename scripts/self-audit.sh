@@ -104,7 +104,7 @@ else
   bad 'sshd binary is missing'
 fi
 [[ -f "$SSH_CONFIG" ]] && ok 'managed main sshd_config exists' || bad 'managed main sshd_config is missing'
-if [[ -f "$SSH_DROPIN_DIR/00-vps-gateway-hardening.conf" ]]; then
+if [[ -f "$SSH_DROPIN_DIR/00-00-vps-gateway-hardening.conf" ]]; then
   ok 'managed SSH hardening drop-in exists'
 else
   bad 'managed SSH hardening drop-in is missing'
